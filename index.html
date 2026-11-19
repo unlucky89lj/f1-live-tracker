@@ -175,7 +175,22 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 .card input{width:100%}
 .card .row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 .err{color:#ff6b6b;font-size:13px;margin-top:8px;min-height:1em}
-@media(max-width:900px){main{grid-template-columns:1fr;grid-template-rows:auto minmax(420px,1fr)}.tower{max-height:44vh;border-right:0;border-bottom:1px solid var(--line)}}
+@media(max-width:900px){
+  html,body{height:auto}body{display:block}
+  main{display:flex;flex-direction:column}
+  .right{order:1;min-height:0}.tower{order:2;overflow:visible;border-right:0;border-top:1px solid var(--line)}
+  .twrap{overflow:visible;flex:none;min-height:0}
+  .tower #radarpane{flex:none;height:280px}.tower .rc{flex:none;max-height:240px}
+  .view{flex:none}.view.on{display:block}#v-map.on{display:flex}
+  #trackpane{flex:none;height:min(72vh,560px);min-height:340px}
+  #side{position:static!important;width:auto!important;margin:0 8px 8px;height:300px}
+  #grid,#stand{position:static;max-height:70vh}#v-grid,#v-stand{min-height:300px}
+  .maptools{top:8px;right:8px;left:8px;flex-wrap:wrap;justify-content:flex-end}.maptools .btn{min-height:32px;padding:4px 9px;font-size:12px}
+  .wxm button{min-height:32px;padding:4px 8px}.wxm span{display:none}
+  #wx{top:auto;bottom:8px;left:8px;max-width:calc(100% - 16px)}
+  header{gap:8px;padding:8px 10px}.logo{font-size:17px}#sess{max-width:100%;flex:1 1 100%}
+  .bar{gap:8px;padding:8px 10px}.speeds .btn{padding:5px 7px}
+}
 </style>
 </head>
 <body>
@@ -206,7 +221,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
    </div>
      <div id="radarpane">
       <div class="rwrap"><div id="rmap"></div><div id="rtl"><button id="rplay" aria-label="Radar pauzeren">❚❚</button><div class="rtlm"><div class="rtlt"><span id="rt0"></span><b id="rtime">Radar…</b><span id="rt1"></span></div><input type="range" id="rseek" min="0" max="0" value="0" aria-label="Radartijd"><div id="ragow"><span id="rago"></span><span id="rspd"></span></div></div></div><div id="rban"></div><div id="rnow"></div><div id="radjp"><span id="radjq"></span><button class="btn" data-a="rl" title="Linksom draaien">⟲</button><button class="btn" data-a="rr" title="Rechtsom draaien">⟳</button><button class="btn" data-a="sm" title="Kleiner">−</button><button class="btn" data-a="sp" title="Groter">+</button><button class="btn" data-a="fl" title="Spiegelen">⇋</button><button class="btn" data-a="auto" title="Opnieuw automatisch uitlijnen">Auto</button><button class="btn on" data-a="ok">Klaar</button><small>Sleep de baan met de muis. Shift = grotere stappen.</small></div><canvas id="rdrops"></canvas><iframe id="cw" title="Circuit Weather" loading="lazy" referrerpolicy="no-referrer"></iframe><a id="cwlink" target="_blank" rel="noopener" href="https://circuit-weather.racing/">Leeg? Open Circuit Weather ↗</a></div>
-      <div class="rbar"><button class="btn" id="rzoom" title="Wisselen tussen circuit en overzicht van de buien">⌖</button><button class="btn on" id="rmot" title="Bewegingsrichting van de buien">Richting</button><button class="btn" id="radj" title="Circuit op de kaart verschuiven, draaien en schalen" style="display:none">Bijstellen</button><button class="btn" id="rsat" title="Satelliet of kaart">Kaart</button><button class="btn" id="rcw" title="Weer van circuit-weather.racing">Circuit Weather</button><button class="btn" id="rbig" title="Groter of kleiner">⤢</button>
+      <div class="rbar"><button class="btn" id="rzoom" title="Wisselen tussen circuit en overzicht van de buien">⌖</button><button class="btn on" id="rmot" title="Bewegingsrichting van de buien">Richting</button><button class="btn" id="radj" title="Circuit op de kaart verschuiven, draaien en schalen" style="display:none">Bijstellen</button><button class="btn" id="rsat" title="Satelliet of kaart">Kaart</button><a class="btn" id="rcw" target="_blank" rel="noopener" href="https://circuit-weather.racing/" title="Opent circuit-weather.racing in een nieuw tabblad" style="text-decoration:none;display:inline-flex;align-items:center;color:var(--ink)">Circuit Weather ↗</a><button class="btn" id="rbig" title="Groter of kleiner">⤢</button>
      </div>
      </div>
       <div class="rc" id="rc"><div class="rch">Race control</div><div class="dim">Race control-berichten verschijnen hier</div></div>
@@ -653,7 +668,7 @@ function initRadarMap(){
   if(!rCenter||rCenter[0]!==ll[0]||rCenter[1]!==ll[1]){rCenter=ll;rFit=null;rmap.setView(ll,14);rRings.clearLayers();rWx=null;rHourly=null;ALN=null;if(adjOn)setAdj(false);renderNow();loadLocalWx();loadCircuitOutline(ll)}
   renderBanner();
   buildRadarFrames();
-  setCw(CWON);
+  setCw(false);try{$('rcw').href=cwUrl()}catch(e){}
 }
 let rTrack=null;
 const OVP=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
@@ -873,12 +888,12 @@ function cwUrl(){
   const rnd=mk.indexOf(s.meeting_key)+1;if(rnd<1)return base;const slug=CWSLUG[s.session_name];
   return `${base}f1/${rnd}${slug?'/'+slug:''}`;
 }
-let CWON=true;try{CWON=localStorage.getItem('f1cw')!=='0'}catch(e){}
+let CWON=false;
 function setCw(on){CWON=on;try{localStorage.setItem('f1cw',on?'1':'0')}catch(e){}
   $('radarpane').classList.toggle('cwmode',on);$('rcw').classList.toggle('on',on);
   if(on){const u=cwUrl();if($('cw').dataset.u!==u){$('cw').src=u;$('cw').dataset.u=u}$('cwlink').href=u}
   setTimeout(()=>{if(rmap){rmap.invalidateSize();if(!on&&rmap.getZoom()>=12)fitCircuit()}fit()},340)}
-$('rcw').onclick=()=>setCw(!CWON);
+$('rcw').onclick=()=>{$('rcw').href=cwUrl()};
 /* storm motion: block matching between the last radar frames */
 let MOT=[],motOn=true,motTimer=null;try{motOn=localStorage.getItem('f1mot')!=='0'}catch(e){}
 $('rmot').classList.toggle('on',motOn);
@@ -1128,7 +1143,7 @@ function fit(){
   if(!S.track.length){view=null;return}
   let a=1e9,b=-1e9,c=1e9,d=-1e9;for(const [x,y] of S.track){const [u,v]=rotPt(x,y);a=Math.min(a,u);b=Math.max(b,u);c=Math.min(c,v);d=Math.max(d,v)}
   let AW=r.width,AH=r.height,OX=0,OY=0;const rp=$('radarpane');
-  const sd=$('side');if(sd&&curView==='map'){const q=sd.getBoundingClientRect();
+  const sd=$('side');if(sd&&curView==='map'&&getComputedStyle(sd).position==='absolute'){const q=sd.getBoundingClientRect();
     if(AW>760){const sh=q.right-r.left+12;OX=sh;AW=Math.max(300,AW-sh)}else{const sh=q.bottom-r.top+8;OY=sh;AH=Math.max(220,AH-sh)}}
   const mt=document.querySelector('.maptools'),top=mt?mt.offsetTop+mt.offsetHeight+18:0;if(top>OY){AH-=top-OY;OY=top}
   const pad=44,sc=Math.min((AW-pad*2)/(b-a||1),(AH-pad*2)/(d-c||1));
