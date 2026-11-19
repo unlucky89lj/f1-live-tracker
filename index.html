@@ -309,7 +309,7 @@ window.addEventListener('unhandledrejection',e=>{try{status('Fout: '+((e.reason&
 function lastLE(a,t){let lo=0,hi=a.length-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(a[m].t<=t){r=m;lo=m+1}else hi=m-1}return r}
 const fmtLap=s=>{if(s==null||!isFinite(s))return '–';const m=Math.floor(s/60),r=(s-m*60).toFixed(3);return m?m+':'+r.padStart(6,'0'):r};
 const fmtShort=s=>{if(s==null)return '';const m=Math.floor(s/60),r=(s-m*60).toFixed(1);return m+':'+r.padStart(4,'0')};
-const fmtClock=ms=>new Date(ms).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const CLK=new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const fmtClock=ms=>CLK.format(ms);
 const fmtDur=ms=>{ms=Math.max(0,ms);const h=Math.floor(ms/3600000),m=Math.floor(ms/60000)%60,s=Math.floor(ms/1000)%60;return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')};
 const TY={SOFT:['S','#ff3b30'],MEDIUM:['M','#ffd400'],HARD:['H','#ffffff'],INTERMEDIATE:['I','#2fd16b'],WET:['W','#2f8cff']};
 const NL={'Practice 1':'Training 1','Practice 2':'Training 2','Practice 3':'Training 3','Qualifying':'Kwalificatie','Sprint Qualifying':'Sprintkwalificatie','Sprint Shootout':'Sprint Shootout','Sprint':'Sprint','Race':'Race'};
@@ -409,7 +409,7 @@ async function loadSession(s){
 /* ---------- location chunks (replay) ---------- */
 function needChunks(){
   if(S.mode!=='replay'||!S.sess)return;
-  const k=Math.floor((S.t-S.t0)/CH),ahead=S.speed>=8?3:2;
+  const k=Math.floor((S.t-S.t0)/CH),ahead=S.speed>=8?4:3;
   for(let i=k;i<=k+ahead;i++){
     if(S.chunks.has(i)&&S.chunks.get(i).__done||S.pending.has(i))continue;
     const a=S.t0+i*CH;if(a>S.t1)break;S.pending.add(i);const g=S.gen;
@@ -542,9 +542,9 @@ function gapText(r,i,overall){
 let CUM=[];
 function trackCum(){CUM=[0];for(let i=1;i<=S.track.length;i++){const a=S.track[i-1],b=S.track[i%S.track.length];CUM.push(CUM[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1]))}}
 function nSectors(){
-  let n=0;for(const dn in S.lapsRaw||{}){n=S.lapsRaw[dn];break}
-  for(const m of S.rc)if(m.sector&&m.sector>n)n=m.sector;
-  return Math.max(n,1);
+  // marshal sectors: the highest sector number race control uses in this session (not the timing mini-sectors)
+  let n=0;for(const m of S.rc)if(m.sector&&m.sector>n)n=m.sector;
+  return n||20;
 }
 function flagState(t){
   const st={sec:{},sc:null,red:false};
@@ -552,7 +552,8 @@ function flagState(t){
     if(m.t>t)break;const f=(m.flag||'').toUpperCase(),msg=(m.message||'').toUpperCase();
     if(m.category==='SafetyCar'){if(/VIRTUAL SAFETY CAR DEPLOYED|VSC DEPLOYED/.test(msg))st.sc='VSC';else if(/VIRTUAL SAFETY CAR ENDING|VSC ENDING/.test(msg))st.sc=null;else if(/SAFETY CAR DEPLOYED/.test(msg))st.sc='SC';else if(/IN THIS LAP/.test(msg)&&st.sc==='SC')st.sc='SCIN'}
     if(m.scope==='Sector'&&m.sector){if(f==='YELLOW'||f==='DOUBLE YELLOW')st.sec[m.sector]=f;else if(f==='CLEAR'||f==='GREEN')delete st.sec[m.sector]}
-    if(m.scope==='Track'){if(f==='RED')st.red=true;else if(f==='GREEN'||f==='CLEAR'){st.red=false;st.sc=null;st.sec={}}else if(f==='CHEQUERED'){st.sc=null}}
+    if(f==='RED'||/RED FLAG/.test(msg)){st.red=true;st.sec={}}
+    else if(m.scope==='Track'||(!m.scope&&!m.sector)){if(f==='GREEN'||f==='CLEAR'||/TRACK CLEAR|GREEN LIGHT|RACE WILL RESUME|SESSION WILL RESUME/.test(msg)&&!/PIT EXIT CLOSED/.test(msg)){st.red=false;st.sc=null;st.sec={}}else if(f==='CHEQUERED'){st.sc=null;st.red=false}}
   }
   return st;
 }
@@ -644,7 +645,7 @@ const PAL=[[140,190,255,150],[100,150,255,170],[85,115,245,190],[115,92,235,200]
 function recolor(cvs){}
 const RadarLayer=window.L?L.GridLayer.extend({
   createTile(co,done){const t=document.createElement('canvas');t.width=t.height=256;const url=this.options.url.replace('{z}',co.z).replace('{x}',co.x).replace('{y}',co.y);
-    const draw=(im,cors)=>{const c=t.getContext('2d',{willReadFrequently:true});c.drawImage(im,0,0,256,256);done(null,t);if(cors){const read=()=>{try{const d=c.getImageData(0,0,256,256).data,a=new Uint8Array(65536);for(let i=0,k=3;i<65536;i++,k+=4)a[i]=d[k];t._a=a}catch(e){t._noread=true}};(window.requestIdleCallback||setTimeout)(read)}else t._noread=true};
+    const draw=(im,cors)=>{const c=t.getContext('2d',{willReadFrequently:true});c.filter='blur(1.5px)';c.drawImage(im,0,0,256,256);c.filter='none';done(null,t);if(cors){const read=()=>{try{const d=c.getImageData(0,0,256,256).data,a=new Uint8Array(65536);for(let i=0,k=3;i<65536;i++,k+=4)a[i]=d[k];t._a=a}catch(e){t._noread=true}};(window.requestIdleCallback||setTimeout)(read)}else t._noread=true};
     const im=new Image();im.crossOrigin='anonymous';im.onload=()=>draw(im,true);
     im.onerror=()=>{const j=new Image();j.onload=()=>draw(j,false);j.onerror=()=>done(null,t);j.src=url};im.src=url;return t}
 }):null;
@@ -653,8 +654,8 @@ function initRadarMap(){
   const ll=circ()||[52.3888,4.5409];
   if(!rmap){
     rmap=L.map('rmap',{zoomControl:false,minZoom:5,maxZoom:16,zoomSnap:.25,zoomDelta:.5,attributionControl:true}).setView(ll,11);
-    rmap.createPane('base').style.zIndex=200;rmap.getPane('base').style.filter='brightness(.55) saturate(.75) contrast(1.1)';
-    const rp=rmap.createPane('radar');rp.classList.add('leaflet-radar-pane');rp.style.zIndex=350;rp.style.filter='blur(2px) saturate(1.1)';rp.style.pointerEvents='none';
+    rmap.createPane('base').style.zIndex=200;{const dim=document.createElement('div');dim.id='rdim';dim.style.cssText='position:absolute;inset:0;z-index:300;pointer-events:none;background:rgba(0,0,0,.42)';$('rmap').appendChild(dim)}
+    const rp=rmap.createPane('radar');rp.classList.add('leaflet-radar-pane');rp.style.zIndex=350;rp.style.pointerEvents='none';
     rmap.createPane('labels').style.zIndex=420;rmap.getPane('labels').style.pointerEvents='none';
     rSat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{pane:'base',maxZoom:19,attribution:'© Esri · radar © RainViewer · Open-Meteo · circuits © T. Bacinger'});
     rBase=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{pane:'base',maxZoom:19,attribution:'© Esri, HERE, Garmin, OpenStreetMap · radar © RainViewer · Open-Meteo · circuits © T. Bacinger'});
@@ -808,7 +809,7 @@ function setBase(sat){
   if(!rmap)return;
   rmap.removeLayer(rSat);rmap.removeLayer(rBase);rmap.removeLayer(rLabels);
   (sat?rSat:rBase).addTo(rmap);if(sat)rLabels.addTo(rmap);
-  rmap.getPane('base').style.filter=sat?'brightness(.55) saturate(.75) contrast(1.1)':'saturate(.8)';
+  {const d=document.getElementById('rdim');if(d)d.style.background=sat?'rgba(0,0,0,.42)':'rgba(0,0,0,0)'}
   $('rsat').textContent=sat?'Kaart':'Satelliet';
   drawCircuit(false);
 }
@@ -1018,14 +1019,11 @@ function drawRain(W,H,dt){
   if(calm)return;
   const sl=Math.sin(((w.wind_direction||0)+180)*Math.PI/180)*Math.min(1,(w.wind_speed||0)/6)*.35;
   ctx.save();ctx.lineCap='round';
-  for(const d of drops){
-    d.y+=d.v*dt/700;d.x+=sl*d.v*dt/700;
-    if(d.y>1){if(d.z===2&&splashes.length<40)splashes.push({x:d.x*W,y:H*(.35+Math.random()*.6),r:0,a:.5});d.y-=1;d.x=Math.random()}
-    if(d.x>1)d.x-=1;if(d.x<0)d.x+=1;
-    const x=d.x*W,y=d.y*H,g=ctx.createLinearGradient(x,y,x+sl*d.l,y+d.l);
-    g.addColorStop(0,'rgba(190,215,255,0)');g.addColorStop(1,`rgba(205,225,255,${d.a})`);
-    ctx.strokeStyle=g;ctx.lineWidth=[.7,1,1.4][d.z];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+sl*d.l,y+d.l);ctx.stroke();
-  }
+  for(let z=0;z<3;z++){ctx.strokeStyle=`rgba(205,225,255,${[.18,.3,.45][z]})`;ctx.lineWidth=[.7,1,1.4][z];ctx.beginPath();
+    for(const d of drops){if(d.z!==z)continue;d.y+=d.v*dt/700;d.x+=sl*d.v*dt/700;
+      if(d.y>1){if(z===2&&splashes.length<40)splashes.push({x:d.x*W,y:H*(.35+Math.random()*.6),r:0,a:.5});d.y-=1;d.x=Math.random()}
+      if(d.x>1)d.x-=1;if(d.x<0)d.x+=1;const x=d.x*W,y=d.y*H;ctx.moveTo(x,y);ctx.lineTo(x+sl*d.l,y+d.l)}
+    ctx.stroke()}
   for(let i=splashes.length-1;i>=0;i--){const p=splashes[i];p.r+=dt*.012;p.a-=dt*.0012;if(p.a<=0){splashes.splice(i,1);continue}
     ctx.strokeStyle=`rgba(200,220,255,${p.a})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(p.x,p.y,p.r*1.8,p.r*.6,0,0,7);ctx.stroke()}
   ctx.restore();
@@ -1149,6 +1147,7 @@ function fit(){
   const pad=44,sc=Math.min((AW-pad*2)/(b-a||1),(AH-pad*2)/(d-c||1));
   view={sc,ox:OX+(AW-(b-a)*sc)/2-a*sc,oy:OY+(AH-(d-c)*sc)/2,maxv:d,dpr,cx:OX+AW/2};
   view.sp=S.track.map(([x,y])=>P(x,y));
+  {const occ=new Set(),C=8;for(const [x,y] of view.sp)occ.add(Math.floor(x/C)+','+Math.floor(y/C));view.occ=occ}
   buildTrackLayer(r.width,r.height,dpr);
 }
 /* realistic static track layer: grass, run-off, white lines, asphalt, kerbs, chequered line */
@@ -1194,7 +1193,7 @@ function drawSatellite(g,W,H,dpr){
   if((x1-x0+1)*(y1-y0+1)>140)return false;
   g.save();g.filter='brightness(.62) saturate(.85) contrast(1.05)';
   for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const key=z+'/'+y+'/'+x;let im=GEO.tiles.get(key);
-    if(!im){im=new Image();im.onload=()=>{clearTimeout(satTimer);satTimer=setTimeout(()=>fit(),120)};im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${key}`;GEO.tiles.set(key,im);if(GEO.tiles.size>400)GEO.tiles.delete(GEO.tiles.keys().next().value)}
+    if(!im){im=new Image();im.onload=()=>{if(!satTimer)satTimer=setTimeout(()=>{satTimer=null;fit()},400)};im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${key}`;GEO.tiles.set(key,im);if(GEO.tiles.size>400)GEO.tiles.delete(GEO.tiles.keys().next().value)}
     if(!im.complete||!im.naturalWidth)continue;
     const p0=llToScreen(t2lat(y,z),t2lon(x,z)),p1=llToScreen(t2lat(y,z),t2lon(x+1,z)),p2=llToScreen(t2lat(y+1,z),t2lon(x,z));
     g.setTransform(dpr*(p1[0]-p0[0])/256,dpr*(p1[1]-p0[1])/256,dpr*(p2[0]-p0[0])/256,dpr*(p2[1]-p0[1])/256,dpr*p0[0],dpr*p0[1]);g.drawImage(im,-.5,-.5,257,257)}
@@ -1289,7 +1288,7 @@ function drawMap(order){
     else for(const m of grp)items.push({key:m.dn,u:m._uv[0],v:m._uv[1],rad:m._uv[2],sel:S.sel==m.dn,lines:[{t:(m.p?m.p+' ':'')+(m.d.name_acronym||m.dn),c:null,s:S.sel==m.dn}]})}
   items.sort((a,b)=>(b.sel-a.sel)||(b.lines.length-a.lines.length));
   const hit=b=>placed.some(q=>b[0]<q[0]+q[2]&&q[0]<b[0]+b[2]&&b[1]<q[1]+q[3]&&q[1]<b[1]+b[3]);
-  const onTrack=b=>{const sp=view.sp||[];for(let k=0;k<sp.length;k++){const [x,y]=sp[k];if(x>b[0]-12&&x<b[0]+b[2]+12&&y>b[1]-12&&y<b[1]+b[3]+12)return true}return false};
+  const onTrack=b=>{const o=view.occ;if(!o)return false;const C=8,x0=Math.floor((b[0]-12)/C),x1=Math.floor((b[0]+b[2]+12)/C),y0=Math.floor((b[1]-12)/C),y1=Math.floor((b[1]+b[3]+12)/C);for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)if(o.has(x+','+y))return true;return false};
   const inB=b=>!(b[0]<4||b[1]<(TB?TB:4)||b[0]+b[2]>W-4||b[1]+b[3]>H-4);
   for(const it of items){
     if(!S.labels&&!it.sel)continue;const {u,v,rad}=it,many=it.lines.length>1,lh=14;
@@ -1315,12 +1314,13 @@ function drawMap(order){
 let lastRows=0,lastGridLap=-1,lastGridAt=0;
 function renderTower(){
   const {rows,overall}=rowsAt(S.t);
-  $('rows').innerHTML=rows.map((r,i)=>{
+  const html=rows.map((r,i)=>{
     const lc=r.last?(r.last.d===overall?'ob':r.last.d===r.best?'pb':''):'';
     const ty=r.st&&TY[r.st.compound],age=r.st?(r.st.tyre_age_at_start||0)+Math.max(0,r.cur-r.st.lap_start):'';
     return `<tr data-dn="${r.dn}" class="${S.sel==r.dn?'sel':''}"><td class="pos">${r.p??i+1}</td><td><span class="drv"><i style="background:${col(r.d)}"></i>${r.d.name_acronym||r.dn}</span></td>
     <td class="num">${gapText(r,i,overall)}</td><td class="num ${lc}">${r.last?fmtLap(r.last.d):'–'}</td><td class="num ${r.best===overall?'ob':''}">${fmtLap(r.best)}</td>
     <td>${ty?`<span class="tyre" style="border-color:${ty[1]};color:${ty[1]}" title="${r.st.compound}, ${age} ronden">${ty[0]}</span> <span class="dim">${age}</span>`:''}</td></tr>`}).join('');
+  if(html!==renderTower.last){$('rows').innerHTML=html;renderTower.last=html}
   return {rows,overall};
 }
 function renderHeader(rows){
@@ -1371,7 +1371,7 @@ function loop(ts){
   needChunks();
   acc+=dt;if(acc>300){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
-  if(curView==='map'){drawDrops(dt);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
+  if(curView==='map'){if((loop.f=(loop.f||0)+1)%2===0)drawDrops(dt*2);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
