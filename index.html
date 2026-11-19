@@ -1153,32 +1153,50 @@ function fit(){
 }
 /* realistic static track layer: grass, run-off, white lines, asphalt, kerbs, chequered line */
 let TL=null;
+function noisePat(g,base,amp,size,dots){
+  const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');x.fillStyle=base;x.fillRect(0,0,size,size);
+  const d=x.getImageData(0,0,size,size),a=d.data;for(let i=0;i<a.length;i+=4){const n=(Math.random()-.5)*amp;a[i]+=n;a[i+1]+=n;a[i+2]+=n}x.putImageData(d,0,0);
+  if(dots)for(let k=0;k<dots.n;k++){x.fillStyle=dots.c[k%dots.c.length];x.fillRect(Math.random()*size,Math.random()*size,dots.s,dots.s)}
+  return g.createPattern(c,'repeat');
+}
 function buildTrackLayer(W,H,dpr){
   TL=document.createElement('canvas');TL.width=W*dpr;TL.height=H*dpr;const g=TL.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.lineJoin=g.lineCap='round';
   const Sp=S.track.map(([x,y])=>P(x,y)),n=Sp.length;
   const path=()=>{g.beginPath();Sp.forEach(([u,v],i)=>i?g.lineTo(u,v):g.moveTo(u,v));g.closePath()};
-  path();g.strokeStyle='#12201a';g.lineWidth=46;g.stroke();
-  g.strokeStyle='#1a2c20';g.lineWidth=36;g.stroke();
-  g.strokeStyle='#33352f';g.lineWidth=26;g.stroke();
-  g.strokeStyle='#d9dbe0';g.lineWidth=17;g.stroke();
-  const grd=g.createLinearGradient(0,0,W,H);grd.addColorStop(0,'#45484f');grd.addColorStop(1,'#383b42');
-  g.strokeStyle=grd;g.lineWidth=14;g.stroke();
-  g.strokeStyle='rgba(0,0,0,.22)';g.lineWidth=4;g.stroke();
-  // kerbs on the inside of corners
-  const K=3,runs=[];let run=null;
-  for(let i=0;i<n;i++){
-    const a=Sp[(i-K+n)%n],b=Sp[i],c=Sp[(i+K)%n];
+  const line=pts=>{g.beginPath();pts.forEach(([u,v],i)=>i?g.lineTo(u,v):g.moveTo(u,v))};
+  // corner detection (shared by gravel, kerbs and rubber line)
+  const K=3,info=[];
+  for(let i=0;i<n;i++){const a=Sp[(i-K+n)%n],b=Sp[i],c=Sp[(i+K)%n];
     const h1=Math.atan2(b[1]-a[1],b[0]-a[0]),h2=Math.atan2(c[1]-b[1],c[0]-b[0]);let dh=h2-h1;while(dh>Math.PI)dh-=2*Math.PI;while(dh<-Math.PI)dh+=2*Math.PI;
-    const len=Math.hypot(c[0]-a[0],c[1]-a[1])||1,k=Math.abs(dh)/len;
-    const tx=(c[0]-a[0])/len,ty=(c[1]-a[1])/len,side=dh>0?1:-1;
-    if(k>.012&&Math.abs(dh)>.12){const pt=[b[0]-ty*8.5*side,b[1]+tx*8.5*side];if(run&&run.side===side&&run.last===i-1){run.pts.push(pt);run.last=i}else{run={side,last:i,pts:[pt]};runs.push(run)}}
-  }
-  for(const r of runs){if(r.pts.length<3)continue;g.beginPath();r.pts.forEach(([u,v],i)=>i?g.lineTo(u,v):g.moveTo(u,v));
-    g.lineCap='butt';g.strokeStyle='#d0202a';g.lineWidth=3.5;g.stroke();g.setLineDash([4,4]);g.strokeStyle='#f4f4f4';g.stroke();g.setLineDash([]);g.lineCap='round'}
-  // chequered start/finish
+    const len=Math.hypot(c[0]-a[0],c[1]-a[1])||1;info.push({b,tx:(c[0]-a[0])/len,ty:(c[1]-a[1])/len,dh,k:Math.abs(dh)/len,side:dh>0?1:-1})}
+  const runs=(test,off)=>{const out=[];let run=null;info.forEach((f,i)=>{if(test(f)){const pt=[f.b[0]-f.ty*off*f.side,f.b[1]+f.tx*off*f.side];if(run&&run.side===f.side&&run.last===i-1){run.pts.push(pt);run.last=i}else{run={side:f.side,last:i,pts:[pt],k:0};out.push(run)}run.k=Math.max(run.k,f.k)}});return out};
+  const corner=f=>f.k>.010&&Math.abs(f.dh)>.10;
+  // 1. grass band with mowing stripes
+  {const gc=document.createElement('canvas');gc.width=TL.width;gc.height=TL.height;const h=gc.getContext('2d');h.setTransform(dpr,0,0,dpr,0,0);
+   h.fillStyle=noisePat(h,'#1f3d26',16,96);h.fillRect(0,0,W,H);
+   h.fillStyle='rgba(60,110,66,.22)';for(let x=-H;x<W;x+=28){h.beginPath();h.moveTo(x,0);h.lineTo(x+14,0);h.lineTo(x+14+H,H);h.lineTo(x+H,H);h.closePath();h.fill()}
+   h.globalCompositeOperation='destination-in';h.lineJoin=h.lineCap='round';h.filter='blur(5px)';h.beginPath();Sp.forEach(([u,v],i)=>i?h.lineTo(u,v):h.moveTo(u,v));h.closePath();h.strokeStyle='#000';h.lineWidth=64;h.stroke();
+   g.save();g.setTransform(1,0,0,1,0,0);g.drawImage(gc,0,0);g.restore()}
+  // 2. gravel traps on the outside of corners
+  const gravel=noisePat(g,'#b9a27a',40,64,{n:220,c:['#8f7a55','#d6c39b','#7b6a4c'],s:1.2});
+  for(const r of runs(corner,-19)){if(r.pts.length<4)continue;line(r.pts);g.strokeStyle=gravel;g.lineWidth=16+Math.min(14,r.k*500);g.lineCap='round';g.stroke()}
+  // 3. tarmac run-off and painted edge
+  path();g.strokeStyle=noisePat(g,'#3a3d43',14,64);g.lineWidth=24;g.stroke();
+  path();g.strokeStyle='#e9ebef';g.lineWidth=16;g.stroke();
+  // 4. asphalt with grain
+  path();g.strokeStyle=noisePat(g,'#555963',18,64,{n:80,c:['#6a6e78','#40434b'],s:1});g.lineWidth=13.5;g.stroke();
+  // 5. rubbered-in racing line, drifting to the inside in corners
+  const rl=info.map(f=>{const o=corner(f)?3.2*Math.min(1,f.k*60):0;return [f.b[0]-f.ty*o*f.side,f.b[1]+f.tx*o*f.side]});
+  line(rl);g.closePath();g.strokeStyle='rgba(15,15,18,.32)';g.lineWidth=4.5;g.stroke();
+  // 6. kerbs inside and outside of corners
+  for(const off of [7.4,-7.4])for(const r of runs(corner,off)){if(r.pts.length<3)continue;line(r.pts);
+    g.lineCap='butt';g.strokeStyle='#d0202a';g.lineWidth=off>0?3.6:2.6;g.stroke();g.setLineDash([3.5,3.5]);g.strokeStyle='#f4f4f4';g.stroke();g.setLineDash([]);g.lineCap='round'}
+  // 7. start/finish: chequered line, grid boxes, arrow
   const [sx,sy]=Sp[0],[nx,ny]=Sp[Math.min(3,n-1)],ang=Math.atan2(ny-sy,nx-sx);
-  g.save();g.translate(sx,sy);g.rotate(ang);const q=2.6;
-  for(let col=0;col<2;col++)for(let row=-3;row<3;row++){g.fillStyle=(col+row)%2?'#111':'#fff';g.fillRect(col*q-q,row*q,q,q)}
+  g.save();g.translate(sx,sy);g.rotate(ang);const q=1.7;
+  for(let c=0;c<2;c++)for(let row=-4;row<4;row++){g.fillStyle=(c+row)%2?'#111':'#fff';g.fillRect(c*q-q,row*q,q,q)}
+  g.strokeStyle='rgba(255,255,255,.75)';g.lineWidth=.9;
+  for(let k=0;k<6;k++){const bx=-10-k*7,by=(k%2?2.2:-2.2);g.beginPath();g.moveTo(bx,by-2.4);g.lineTo(bx,by+2.4);g.moveTo(bx,by-2.4);g.lineTo(bx-2.5,by-2.4);g.moveTo(bx,by+2.4);g.lineTo(bx-2.5,by+2.4);g.stroke()}
   g.fillStyle='rgba(255,255,255,.55)';g.beginPath();g.moveTo(26,-17);g.lineTo(36,-13);g.lineTo(26,-9);g.closePath();g.fill();
   g.restore();
 }
