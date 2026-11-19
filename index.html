@@ -238,7 +238,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
       <div class="wx" id="wx"></div>
       <div class="toast" id="toast"></div>
 
-      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
+      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
       <div class="empty" id="mapEmpty">Baan verschijnt zodra de sessie is geladen</div>
      </div>
      <div id="side">
@@ -372,7 +372,7 @@ async function buildTrack(){
   if(!best)return;
   const pts=await api('location',`session_key=${S.sess.session_key}&driver_number=${best.dn}&date>=${iso(best.s)}&date<${iso(best.s+best.d*1000+400)}`);
   const tr=pts.filter(p=>p.x||p.y).map(p=>[p.x,p.y]);
-  if(tr.length>50){S.track=tr;trackCum();fit();maybeAlign()}
+  if(tr.length>50){S.track=tr;trackCum();geoAlign();fit();maybeAlign()}
 }
 async function loadSession(s){
   reset();lastRain=null;RA.pause();raKey=null;raSig='';raLastT=0;S.mode='replay';S.sess=s;setLive(false);
@@ -1153,6 +1153,53 @@ function fit(){
 }
 /* realistic static track layer: grass, run-off, white lines, asphalt, kerbs, chequered line */
 let TL=null;
+/* ---- real satellite image under the track ---- */
+const GEO={fit:null,on:true,tiles:new Map(),key:''};try{GEO.on=localStorage.getItem('f1realsat')!=='0'}catch(e){}
+function resample(pts,N){const cum=[0];for(let i=1;i<=pts.length;i++){const a=pts[i-1],b=pts[i%pts.length];cum.push(cum[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1]))}
+  const L=cum[cum.length-1],out=[];let j=0;for(let k=0;k<N;k++){const t=k/N*L;while(j<pts.length-1&&cum[j+1]<t)j++;const a=pts[j],b=pts[(j+1)%pts.length],f=(t-cum[j])/((cum[j+1]-cum[j])||1);out.push([a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f])}return out}
+function geoAlign(){
+  // fits the F1 x/y track onto the real circuit outline: best rotation, scale, mirror and start point (least squares)
+  GEO.fit=null;const g=circGeo();if(!g||S.track.length<50)return;
+  let la=0,lo=0;for(const [a,b] of g){la+=a;lo+=b}la/=g.length;lo/=g.length;const M=111320,cl=Math.cos(la*Math.PI/180);
+  const N=180,B0=resample(g.map(([a,b])=>[(b-lo)*M*cl,(a-la)*M]),N),A0=resample(S.track,N);
+  const cen=P=>{let x=0,y=0;for(const p of P){x+=p[0];y+=p[1]}return [x/P.length,y/P.length]};
+  const ca=cen(A0),cb=cen(B0),A=A0.map(p=>[p[0]-ca[0],p[1]-ca[1]]),Bc=B0.map(p=>[p[0]-cb[0],p[1]-cb[1]]);
+  let aa=0;for(const p of A)aa+=p[0]*p[0]+p[1]*p[1];
+  let best=null;
+  for(const rev of [false,true]){const B=rev?[...Bc].reverse():Bc;
+    for(const f of [1,-1])for(let k=0;k<N;k++){let sc=0,ss=0;
+      for(let i=0;i<N;i++){const ax=A[i][0],ay=A[i][1]*f,b=B[(i+k)%N];sc+=ax*b[0]+ay*b[1];ss+=ax*b[1]-ay*b[0]}
+      const th=Math.atan2(ss,sc),s=Math.hypot(sc,ss)/aa;
+      if(!best||Math.hypot(sc,ss)>best.v)best={v:Math.hypot(sc,ss),th,s,f,rev,k}}}
+  // residual error in metres
+  const B=best.rev?[...Bc].reverse():Bc,c=Math.cos(best.th),sn=Math.sin(best.th);let err=0,ext=0;
+  for(let i=0;i<N;i++){const ax=A[i][0],ay=A[i][1]*best.f,e=best.s*(ax*c-ay*sn),n=best.s*(ax*sn+ay*c),b=B[(i+best.k)%N];err+=(e-b[0])**2+(n-b[1])**2;ext=Math.max(ext,Math.hypot(b[0],b[1]))}
+  const rms=Math.sqrt(err/N);if(rms>Math.max(40,ext*.06))return;
+  GEO.fit={la,lo,cl,M,ca,cb,th:best.th,s:best.s,f:best.f,rms};
+}
+function llToScreen(lat,lon){const F=GEO.fit,e=(lon-F.lo)*F.M*F.cl-F.cb[0],n=(lat-F.la)*F.M-F.cb[1],c=Math.cos(-F.th),sn=Math.sin(-F.th);
+  const qx=(e*c-n*sn)/F.s,qy=(e*sn+n*c)/F.s;return P(qx+F.ca[0],qy/F.f+F.ca[1])}
+function screenToLL(X,Y){const F=GEO.fit;let u=(X-view.ox)/view.sc,v=view.maxv-(Y-view.oy)/view.sc;
+  switch(S.rot){case 1:[u,v]=[v,-u];break;case 2:[u,v]=[-u,-v];break;case 3:[u,v]=[-v,u];break}
+  const qx=u-F.ca[0],qy=(v-F.ca[1])*F.f,c=Math.cos(F.th),sn=Math.sin(F.th),e=F.s*(qx*c-qy*sn)+F.cb[0],n=F.s*(qx*sn+qy*c)+F.cb[1];
+  return [n/F.M+F.la,e/(F.M*F.cl)+F.lo]}
+const t2lon=(x,z)=>x/2**z*360-180,t2lat=(y,z)=>{const n=Math.PI-2*Math.PI*y/2**z;return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)))};
+const lon2t=(lo,z)=>(lo+180)/360*2**z,lat2t=(la,z)=>(1-Math.log(Math.tan(la*Math.PI/180)+1/Math.cos(la*Math.PI/180))/Math.PI)/2*2**z;
+let satTimer=null;
+function drawSatellite(g,W,H,dpr){
+  if(!GEO.on||!GEO.fit||!view)return false;const F=GEO.fit;
+  const pxm=view.sc/F.s,z=Math.max(12,Math.min(19,Math.round(Math.log2(156543*F.cl*pxm*dpr)+.3)));
+  const cs=[[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>screenToLL(x,y)),las=cs.map(c=>c[0]),los=cs.map(c=>c[1]);
+  const x0=Math.floor(lon2t(Math.min(...los),z)),x1=Math.floor(lon2t(Math.max(...los),z)),y0=Math.floor(lat2t(Math.max(...las),z)),y1=Math.floor(lat2t(Math.min(...las),z));
+  if((x1-x0+1)*(y1-y0+1)>140)return false;
+  g.save();g.filter='brightness(.62) saturate(.85) contrast(1.05)';
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const key=z+'/'+y+'/'+x;let im=GEO.tiles.get(key);
+    if(!im){im=new Image();im.onload=()=>{clearTimeout(satTimer);satTimer=setTimeout(()=>fit(),120)};im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${key}`;GEO.tiles.set(key,im);if(GEO.tiles.size>400)GEO.tiles.delete(GEO.tiles.keys().next().value)}
+    if(!im.complete||!im.naturalWidth)continue;
+    const p0=llToScreen(t2lat(y,z),t2lon(x,z)),p1=llToScreen(t2lat(y,z),t2lon(x+1,z)),p2=llToScreen(t2lat(y+1,z),t2lon(x,z));
+    g.setTransform(dpr*(p1[0]-p0[0])/256,dpr*(p1[1]-p0[1])/256,dpr*(p2[0]-p0[0])/256,dpr*(p2[1]-p0[1])/256,dpr*p0[0],dpr*p0[1]);g.drawImage(im,-.5,-.5,257,257)}
+  g.restore();g.setTransform(dpr,0,0,dpr,0,0);return true;
+}
 function noisePat(g,base,amp,size,dots){
   const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');x.fillStyle=base;x.fillRect(0,0,size,size);
   const d=x.getImageData(0,0,size,size),a=d.data;for(let i=0;i<a.length;i+=4){const n=(Math.random()-.5)*amp;a[i]+=n;a[i+1]+=n;a[i+2]+=n}x.putImageData(d,0,0);
@@ -1171,20 +1218,23 @@ function buildTrackLayer(W,H,dpr){
     const len=Math.hypot(c[0]-a[0],c[1]-a[1])||1;info.push({b,tx:(c[0]-a[0])/len,ty:(c[1]-a[1])/len,dh,k:Math.abs(dh)/len,side:dh>0?1:-1})}
   const runs=(test,off)=>{const out=[];let run=null;info.forEach((f,i)=>{if(test(f)){const pt=[f.b[0]-f.ty*off*f.side,f.b[1]+f.tx*off*f.side];if(run&&run.side===f.side&&run.last===i-1){run.pts.push(pt);run.last=i}else{run={side:f.side,last:i,pts:[pt],k:0};out.push(run)}run.k=Math.max(run.k,f.k)}});return out};
   const corner=f=>f.k>.010&&Math.abs(f.dh)>.10;
+  const sat=drawSatellite(g,W,H,dpr);
   // 1. grass band with mowing stripes
-  {const gc=document.createElement('canvas');gc.width=TL.width;gc.height=TL.height;const h=gc.getContext('2d');h.setTransform(dpr,0,0,dpr,0,0);
+  if(!sat){const gc=document.createElement('canvas');gc.width=TL.width;gc.height=TL.height;const h=gc.getContext('2d');h.setTransform(dpr,0,0,dpr,0,0);
    h.fillStyle=noisePat(h,'#1f3d26',16,96);h.fillRect(0,0,W,H);
    h.fillStyle='rgba(60,110,66,.22)';for(let x=-H;x<W;x+=28){h.beginPath();h.moveTo(x,0);h.lineTo(x+14,0);h.lineTo(x+14+H,H);h.lineTo(x+H,H);h.closePath();h.fill()}
    h.globalCompositeOperation='destination-in';h.lineJoin=h.lineCap='round';h.filter='blur(5px)';h.beginPath();Sp.forEach(([u,v],i)=>i?h.lineTo(u,v):h.moveTo(u,v));h.closePath();h.strokeStyle='#000';h.lineWidth=64;h.stroke();
    g.save();g.setTransform(1,0,0,1,0,0);g.drawImage(gc,0,0);g.restore()}
   // 2. gravel traps on the outside of corners
-  const gravel=noisePat(g,'#b9a27a',40,64,{n:220,c:['#8f7a55','#d6c39b','#7b6a4c'],s:1.2});
-  for(const r of runs(corner,-19)){if(r.pts.length<4)continue;line(r.pts);g.strokeStyle=gravel;g.lineWidth=16+Math.min(14,r.k*500);g.lineCap='round';g.stroke()}
+  if(!sat){const gravel=noisePat(g,'#b9a27a',40,64,{n:220,c:['#8f7a55','#d6c39b','#7b6a4c'],s:1.2});
+  for(const r of runs(corner,-19)){if(r.pts.length<4)continue;line(r.pts);g.strokeStyle=gravel;g.lineWidth=16+Math.min(14,r.k*500);g.lineCap='round';g.stroke()}}
+  if(sat)g.globalAlpha=.55;
   // 3. tarmac run-off and painted edge
   path();g.strokeStyle=noisePat(g,'#3a3d43',14,64);g.lineWidth=24;g.stroke();
   path();g.strokeStyle='#e9ebef';g.lineWidth=16;g.stroke();
   // 4. asphalt with grain
   path();g.strokeStyle=noisePat(g,'#555963',18,64,{n:80,c:['#6a6e78','#40434b'],s:1});g.lineWidth=13.5;g.stroke();
+  g.globalAlpha=1;
   // 5. rubbered-in racing line, drifting to the inside in corners
   const rl=info.map(f=>{const o=corner(f)?3.2*Math.min(1,f.k*60):0;return [f.b[0]-f.ty*o*f.side,f.b[1]+f.tx*o*f.side]});
   line(rl);g.closePath();g.strokeStyle='rgba(15,15,18,.32)';g.lineWidth=4.5;g.stroke();
@@ -1228,26 +1278,37 @@ function drawMap(order){
     ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(Lc-3,-Wc+1,2,Wc*2-2);
     ctx.restore();
   }
-  const lab=[...order].filter(r=>r._uv&&where(r.dn,S.t));lab.sort((a,b)=>(S.sel==b.dn)-(S.sel==a.dn));
-  for(const r of lab){
-    const sel=S.sel==r.dn;if(!S.labels&&!sel)continue;const [u,v,rad]=r._uv;
-    const tx=(r.p?r.p+' ':'')+(r.d.name_acronym||r.dn),tw=ctx.measureText(tx).width+8,bh=16;
-    // try spots around the car; skip spots that cover the track, the buttons, or another label
-    const hit=b=>placed.some(q=>b[0]<q[0]+q[2]&&q[0]<b[0]+b[2]&&b[1]<q[1]+q[3]&&q[1]<b[1]+b[3]);
-    const onTrack=b=>{const sp=view.sp||[];for(let k=0;k<sp.length;k++){const [x,y]=sp[k];if(x>b[0]-12&&x<b[0]+b[2]+12&&y>b[1]-12&&y<b[1]+b[3]+12)return true}return false};
-    const L0=window.LBL[r.dn],cost=b=>(onTrack(b)?100:0)+(hit(b)?1000:0);
+  const lab=[...order].filter(r=>r._uv&&where(r.dn,S.t));
+  // group cars that sit close together; groups of 3+ get one tidy list instead of loose names
+  const items=[],used=new Set(),byPos=[...lab].sort((a,b)=>(a.p??99)-(b.p??99));
+  for(const r of byPos){if(used.has(r.dn))continue;const grp=[r];used.add(r.dn);
+    for(let grow=true;grow;){grow=false;for(const o of byPos){if(used.has(o.dn))continue;if(grp.some(m=>Math.hypot(m._uv[0]-o._uv[0],m._uv[1]-o._uv[1])<22)){grp.push(o);used.add(o.dn);grow=true}}}
+    grp.sort((a,b)=>(a.p??99)-(b.p??99));
+    if(grp.length>=3){const u=grp.reduce((a,m)=>a+m._uv[0],0)/grp.length,v=grp.reduce((a,m)=>a+m._uv[1],0)/grp.length;
+      items.push({key:'g'+grp[0].dn,u,v,rad:8,sel:grp.some(m=>S.sel==m.dn),lines:grp.map(m=>({t:(m.p?m.p+' ':'')+(m.d.name_acronym||m.dn),c:col(m.d),s:S.sel==m.dn}))})}
+    else for(const m of grp)items.push({key:m.dn,u:m._uv[0],v:m._uv[1],rad:m._uv[2],sel:S.sel==m.dn,lines:[{t:(m.p?m.p+' ':'')+(m.d.name_acronym||m.dn),c:null,s:S.sel==m.dn}]})}
+  items.sort((a,b)=>(b.sel-a.sel)||(b.lines.length-a.lines.length));
+  const hit=b=>placed.some(q=>b[0]<q[0]+q[2]&&q[0]<b[0]+b[2]&&b[1]<q[1]+q[3]&&q[1]<b[1]+b[3]);
+  const onTrack=b=>{const sp=view.sp||[];for(let k=0;k<sp.length;k++){const [x,y]=sp[k];if(x>b[0]-12&&x<b[0]+b[2]+12&&y>b[1]-12&&y<b[1]+b[3]+12)return true}return false};
+  const inB=b=>!(b[0]<4||b[1]<(TB?TB:4)||b[0]+b[2]>W-4||b[1]+b[3]>H-4);
+  for(const it of items){
+    if(!S.labels&&!it.sel)continue;const {u,v,rad}=it,many=it.lines.length>1,lh=14;
+    const tw=Math.max(...it.lines.map(l=>ctx.measureText(l.t).width))+(many?16:8),bh=many?it.lines.length*lh+6:16;
+    const L0=window.LBL[it.key],cost=b=>(onTrack(b)?100:0)+(hit(b)?1000:0);
     let best=null,bs=1e9;
-    if(L0){const b=[u+L0.tx-tw/2,v+L0.ty-bh/2,tw,bh];if(b[0]>=4&&b[1]>=(TB?TB:4)&&b[0]+b[2]<=W-4&&b[1]+b[3]<=H-4){const c=cost(b);if(c<100){best=b;bs=c}}}
-    if(!best)for(const d of [10,18,28])for(let a=0;a<16;a++){const an=a/16*Math.PI*2,cx=u+Math.cos(an)*(d+tw/2*Math.abs(Math.cos(an))),cy=v+Math.sin(an)*(d+bh/2*Math.abs(Math.sin(an)));
-      const b=[cx-tw/2,cy-bh/2,tw,bh];if(b[0]<4||b[1]<(TB?TB:4)||b[0]+b[2]>W-4||b[1]+b[3]>H-4)continue;
-      const sc=(onTrack(b)?100:0)+(hit(b)?1000:0)+d*.6;if(sc<bs){bs=sc;best=b}if(sc<5)break}
-    if(!best||(bs>=1000&&!sel))continue;
-    // remember the spot relative to the car, and glide there instead of jumping
-    const tx2=best[0]+tw/2-u,ty2=best[1]+bh/2-v;let L=window.LBL[r.dn];if(!L)L=window.LBL[r.dn]={tx:tx2,ty:ty2,cx:tx2,cy:ty2};
+    if(L0){const b=[u+L0.tx-tw/2,v+L0.ty-bh/2,tw,bh];if(inB(b)){const c=cost(b);if(c<100){best=b;bs=c}}}
+    if(!best)for(const d of (many?[22,40,64,96]:[10,18,28]))for(let a=0;a<16;a++){const an=a/16*Math.PI*2,cx=u+Math.cos(an)*(d+tw/2*Math.abs(Math.cos(an))),cy=v+Math.sin(an)*(d+bh/2*Math.abs(Math.sin(an)));
+      const b=[cx-tw/2,cy-bh/2,tw,bh];if(!inB(b))continue;const sc=cost(b)+d*.6;if(sc<bs){bs=sc;best=b}if(sc<5+d)break}
+    if(!best||(bs>=1000&&!it.sel))continue;
+    const tx2=best[0]+tw/2-u,ty2=best[1]+bh/2-v;let L=window.LBL[it.key];if(!L||L.n!==it.lines.length){L=window.LBL[it.key]={tx:tx2,ty:ty2,cx:tx2,cy:ty2,n:it.lines.length}}
     L.tx=tx2;L.ty=ty2;L.cx+=(L.tx-L.cx)*.12;L.cy+=(L.ty-L.cy)*.12;
-    best=[u+L.cx-tw/2,v+L.cy-bh/2,tw,bh];
-    placed.push([u+L.tx-tw/2,v+L.ty-bh/2,tw,bh]);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(u,v);ctx.lineTo(Math.max(best[0],Math.min(u,best[0]+best[2])),Math.max(best[1],Math.min(v,best[1]+best[3])));ctx.stroke();
-    ctx.fillStyle='rgba(0,0,0,.8)';ctx.fillRect(...best);ctx.fillStyle='#fff';ctx.fillText(tx,best[0]+4,best[1]+bh/2+.5);
+    const B=[u+L.cx-tw/2,v+L.cy-bh/2,tw,bh];placed.push([u+L.tx-tw/2,v+L.ty-bh/2,tw,bh]);
+    ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(u,v);ctx.lineTo(Math.max(B[0],Math.min(u,B[0]+B[2])),Math.max(B[1],Math.min(v,B[1]+B[3])));ctx.stroke();
+    if(many){ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(u,v,9,0,7);ctx.stroke()}
+    ctx.fillStyle='rgba(0,0,0,.82)';ctx.fillRect(...B);
+    it.lines.forEach((l,k)=>{const y=many?B[1]+3+k*lh+lh/2:B[1]+bh/2+.5;
+      if(l.c){ctx.fillStyle=l.c;ctx.fillRect(B[0]+4,y-5,3,10)}
+      ctx.fillStyle=l.s?'#ffd400':'#fff';ctx.fillText(l.t,B[0]+(l.c?11:4),y+.5)});
   }
   for(const r of order)delete r._uv;
 }
@@ -1327,6 +1388,7 @@ $('rows').onclick=e=>{const tr=e.target.closest('tr');if(!tr)return;S.sel=S.sel=
 $('gapHead').onclick=()=>{S.gapMode=S.gapMode==='gap'?'int':'gap';$('gapHead').textContent=S.gapMode==='gap'?'GAP':'INT';renderAll()};
 $('radarBtn').onclick=()=>{const off=$('radarpane').classList.toggle('off');$('radarBtn').classList.toggle('on',!off);setTimeout(()=>{fit();rmap&&rmap.invalidateSize();sizeDrops()},50)};$('radarBtn').classList.add('on');
 setWxm(WXM);
+$('rsatb').classList.toggle('on',GEO.on);$('rsatb').onclick=()=>{GEO.on=!GEO.on;try{localStorage.setItem('f1realsat',GEO.on?'1':'0')}catch(e){}$('rsatb').classList.toggle('on',GEO.on);fit()};
 $('rot').onclick=()=>{S.rot=(S.rot+1)%4;fit()};
 $('labels').onclick=()=>{S.labels=!S.labels;$('labels').classList.toggle('on',S.labels)};$('labels').classList.add('on');
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{curView=b.dataset.v;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
