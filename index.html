@@ -371,7 +371,7 @@ async function loadYear(y){
 
 /* ---------- loading a session ---------- */
 function reset(){
-  stopPolls();S.gen++;S.playing=false;$('play').textContent='▶';
+  stopPolls();S.src=null;S.gen++;S.playing=false;$('play').textContent='▶';
   Object.assign(S,{wx:[],radio:[],drivers:{},laps:{},stints:{},rc:[],pos:{},iv:{},chunks:new Map(),pending:new Set(),track:[],lastLocT:0,lastPosT:0,lastIvT:0,maxT:0,sel:null});
 }
 function setDrivers(arr){for(const d of arr)S.drivers[d.driver_number]=d}
@@ -401,6 +401,7 @@ function addLoc(arr){
   for(const c of touched)for(const dn in c)if(Array.isArray(c[dn]))c[dn].sort((a,b)=>a.t-b.t);
 }
 async function buildTrack(){
+  if(S.src==='mv')return mvTrackFromLaps();
   let best=null;
   for(const dn in S.laps)for(const l of S.laps[dn])if(l.d&&!l.pit&&l.n>1&&(!best||l.d<best.d))best={...l,dn};
   if(!best)return;
@@ -1312,7 +1313,7 @@ async function mvPoll(){
     if(MV.mine&&Date.now()-MV.lastSwap>6000&&!MV.players.some(p=>String(p.id)===String(MV.mine))){MV.mine=null;MV.mineDn=null}
     for(const id of [...MV.made])if(String(id)!==String(MV.mine)&&MV.players.some(p=>String(p.id)===String(id))){MV.made.delete(id);mvq('mutation($id: ID!){ playerDelete(id:$id) }',{id}).catch(()=>{})}
     const sp=MV.players.find(p=>p.streamData&&p.streamData.sessionKey);MV.sess=sp?sp.streamData.sessionKey:null;
-    if(MV.sess&&(!S.sess||String(MV.sess)!==String(S.sess.session_key))&&MV.follow&&MV.loadingKey!==MV.sess){MV.loadingKey=MV.sess;api('sessions','session_key='+MV.sess).then(a=>{if(a&&a[0])loadSession(a[0])}).catch(()=>{})}
+    if(S.src!=='mv'&&MV.sess&&(!S.sess||String(MV.sess)!==String(S.sess.session_key))&&MV.follow&&MV.loadingKey!==MV.sess){MV.loadingKey=MV.sess;api('sessions','session_key='+MV.sess).then(a=>{if(a&&a[0])loadSession(a[0])}).catch(()=>{})}
   }catch(e){MV.ok=false;MV.err=e.message||String(e);MV.blocked=false;MV.helper=false;
     try{const c2=new AbortController();setTimeout(()=>c2.abort(),2500);const h=await fetch('http://127.0.0.1:10102/status',{signal:c2.signal});MV.helper=h.ok}catch(e3){}
     if(!MV.helper)try{await fetch('http://127.0.0.1:10101/api/graphql',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:'{}'});MV.blocked=true}catch(e2){}}
@@ -1350,6 +1351,74 @@ function mvUI(){
   const sv=mvSave;const ms=$('mvSync');if(ms)ms.onclick=()=>{const v=mvVideo();if(v&&S.sess){MV.offs[S.sess.session_key]=S.t-v.t;mvSave();mvUI()}};
   const a=$('mvAuto');if(a)a.onchange=()=>{MV.auto=a.checked;sv()};const f=$('mvFollow');if(f)f.onchange=()=>{MV.follow=f.checked;sv()};
   $('mvOff').onclick=()=>{MV.on=!MV.on;if(MV.on)mvStart();else mvStop();mvUI()};$('mvClose').onclick=()=>{box.classList.remove('on')};const q=$('mvQuit');if(q)q.onclick=()=>{fetch('http://127.0.0.1:10102/quit',{method:'POST'}).catch(()=>{});mvStop();mvUI()};
+}
+/* ---------- live data from MultiViewer's F1 live timing (uses the user's F1 TV Pro inside MultiViewer) ---------- */
+const MVL={laps:{},lapList:[],lastPos:{},lastIv:{},posTs:'',rcN:0,wxKey:'',radioN:0,timer:null,sessKey:null,trackTried:0};
+const utc=x=>x?(/Z$|[+-]\d\d:?\d\d$/.test(x)?x:x+'Z'):null;
+const lapSecs=v=>{if(!v)return null;const m=String(v).match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);return m?(+(m[1]||0))*60+ +m[2]:null};
+const gapVal=v=>{if(v==null||v==='')return null;const x=String(v).trim();if(/LAP/i.test(x))return x.startsWith('+')?x:'+'+x;const n=parseFloat(x.replace('+',''));return isNaN(n)?null:n};
+const vals=o=>Array.isArray(o)?o:o&&typeof o==='object'?Object.keys(o).filter(k=>!k.startsWith('_')).sort((a,b)=>a-b).map(k=>o[k]):[];
+async function mvState(){return (await mvq('{ f1LiveTimingState { SessionInfo DriverList TimingData TimingAppData RaceControlMessages TrackStatus WeatherData LapCount Position TeamRadio } f1LiveTimingClock { paused systemTime trackTime liveTimingStartTime } }'))}
+async function startMvLive(){
+  reset();S.mode='live';S.src='mv';setLive(true);const g=S.gen;Object.assign(MVL,{laps:{},lapList:[],lastPos:{},lastIv:{},posTs:'',rcN:0,wxKey:'',radioN:0,trackTried:0});
+  try{
+    status('Live data uit MultiViewer laden…');
+    const d=await mvState(),st=d.f1LiveTimingState,si=st&&st.SessionInfo;if(!si)throw new Error('open de Live Timing in MultiViewer');
+    MV.clock=d.f1LiveTimingClock;MV.clockAt=Date.now();
+    let sess=null;try{sess=(await api('sessions','session_key='+si.Key))[0]}catch(e){}
+    if(!sess){const off=si.GmtOffset||'00:00:00',sign=off.startsWith('-')?'-':'+',hm=off.replace('-','').slice(0,5);const toIso=x=>x?new Date(Date.parse(x+sign+hm)).toISOString():null;
+      sess={session_key:si.Key,meeting_key:si.Meeting&&si.Meeting.Key,session_name:si.Name,session_type:si.Type,country_name:si.Meeting&&si.Meeting.Country&&si.Meeting.Country.Name,location:si.Meeting&&si.Meeting.Location,circuit_short_name:si.Meeting&&si.Meeting.Circuit&&si.Meeting.Circuit.ShortName,date_start:toIso(si.StartDate),date_end:toIso(si.EndDate),gmt_offset:off,year:new Date().getFullYear()}}
+    if(g!==S.gen)return;S.sess=sess;S.t0=T(sess.date_start)||Date.now()-36e5;S.t1=T(sess.date_end)||Date.now()+36e5;MVL.sessPath=si.Path;
+    try{initRadarMap()}catch(e){}
+    mvIngest(st);S.t=(mvTrackNow()||Date.now())-1200;
+    MVL.timer=setInterval(mvLivePoll,1000);S.polls.push(MVL.timer,setInterval(()=>loadChamp(S.sess.session_key),60000));
+    status(`LIVE via F1 TV Pro (MultiViewer) — ${sess.country_name||''} ${NL[sess.session_name]||sess.session_name||''}`);
+    renderAll(true);togglePlay(true);
+  }catch(e){setLive(false);S.mode='idle';S.src=null;status('Live via MultiViewer lukt niet: '+e.message,true)}
+}
+async function mvLivePoll(){if(S.mode!=='live'||S.src!=='mv')return;try{const d=await mvState();if(d.f1LiveTimingClock){MV.clock=d.f1LiveTimingClock;MV.clockAt=Date.now()}if(d.f1LiveTimingState)mvIngest(d.f1LiveTimingState)}catch(e){status('Live (MultiViewer): '+e.message,true)}}
+function mvIngest(st){
+  const now=mvTrackNow()||Date.now(),nowIso=new Date(now).toISOString();
+  // drivers
+  const dl=st.DriverList||{},drs=[];for(const k in dl){const x=dl[k];if(!x||!x.Tla)continue;drs.push({driver_number:+(x.RacingNumber||k),name_acronym:x.Tla,team_colour:x.TeamColour,team_name:x.TeamName,full_name:x.FullName,first_name:x.FirstName,last_name:x.LastName,broadcast_name:x.BroadcastName,headshot_url:x.HeadshotUrl})}
+  if(drs.length)setDrivers(drs);
+  // timing: positions, gaps, laps
+  const lines=(st.TimingData&&st.TimingData.Lines)||{},pos=[],iv=[];let lapsChanged=false;
+  for(const k in lines){const L=lines[k],dn=+k;if(!L)continue;
+    const p=+L.Position;if(p&&MVL.lastPos[dn]!==p){MVL.lastPos[dn]=p;pos.push({date:nowIso,driver_number:dn,position:p})}
+    const gp=gapVal(L.GapToLeader),it=gapVal(L.IntervalToPositionAhead&&L.IntervalToPositionAhead.Value),key=gp+'|'+it;
+    if((gp!=null||it!=null||p===1)&&MVL.lastIv[dn]!==key){MVL.lastIv[dn]=key;iv.push({date:nowIso,driver_number:dn,gap_to_leader:p===1?0:gp,interval:p===1?0:it})}
+    const n=+L.NumberOfLaps||0,ls=MVL.laps[dn]||(MVL.laps[dn]={n:null,list:[]});
+    if(ls.n==null){ls.n=n;ls.list.push({driver_number:dn,lap_number:n+1,date_start:nowIso,lap_duration:null,is_pit_out_lap:!!L.PitOut});lapsChanged=true}
+    else if(n>ls.n){const dur=lapSecs(L.LastLapTime&&L.LastLapTime.Value),cur=ls.list[ls.list.length-1];
+      if(cur&&cur.lap_number===n){cur.lap_duration=dur;if(dur)cur.date_start=new Date(now-dur*1000).toISOString()}
+      else ls.list.push({driver_number:dn,lap_number:n,date_start:dur?new Date(now-dur*1000).toISOString():null,lap_duration:dur,is_pit_out_lap:false});
+      ls.list.push({driver_number:dn,lap_number:n+1,date_start:nowIso,lap_duration:null,is_pit_out_lap:!!L.PitOut});ls.n=n;lapsChanged=true}}
+  if(pos.length)addSeries(S.pos,pos,(r,t)=>({t,p:r.position}));
+  if(iv.length)addSeries(S.iv,iv,(r,t)=>({t,gap:r.gap_to_leader,int:r.interval}));
+  if(lapsChanged){const all=[];for(const dn in MVL.laps)all.push(...MVL.laps[dn].list);setLaps(all)}
+  // tyres
+  const app=(st.TimingAppData&&st.TimingAppData.Lines)||{},stints=[];
+  for(const k in app){let end=0;vals(app[k]&&app[k].Stints).forEach((x,i)=>{if(!x)return;const age=+x.StartLaps||0,tot=+x.TotalLaps||age,laps=Math.max(0,tot-age),a=end+1;end=a+Math.max(laps,1)-1;stints.push({driver_number:+k,stint_number:i+1,compound:x.Compound,tyre_age_at_start:age,lap_start:a,lap_end:end})})}
+  if(stints.length)setStints(stints);
+  // race control
+  const msgs=vals(st.RaceControlMessages&&st.RaceControlMessages.Messages);
+  if(msgs.length!==MVL.rcN){MVL.rcN=msgs.length;S.rc=msgs.filter(Boolean).map(m=>({date:utc(m.Utc),t:T(utc(m.Utc)),category:m.Category,flag:m.Flag,scope:m.Scope,sector:m.Sector,message:m.Message,lap_number:m.Lap,driver_number:m.RacingNumber?+m.RacingNumber:null})).sort((a,b)=>a.t-b.t)}
+  // weather
+  const w=st.WeatherData;if(w){const key=[w.AirTemp,w.TrackTemp,w.Rainfall,w.WindSpeed,w.WindDirection,w.Humidity].join('|');if(key!==MVL.wxKey){MVL.wxKey=key;S.wx.push({date:nowIso,t:now,air_temperature:+w.AirTemp,track_temperature:+w.TrackTemp,humidity:+w.Humidity,pressure:+w.Pressure,rainfall:+w.Rainfall,wind_speed:+w.WindSpeed,wind_direction:+w.WindDirection})}}
+  // car positions
+  const P=st.Position,batches=Array.isArray(P)?P:P&&Array.isArray(P.Position)?P.Position:P&&P.Timestamp?[P]:[],loc=[];
+  for(const b of batches){if(!b||!b.Timestamp||b.Timestamp<=MVL.posTs)continue;const ts=utc(b.Timestamp);for(const k in (b.Entries||{})){const e=b.Entries[k];if(e&&(e.X||e.Y))loc.push({date:ts,driver_number:+k,x:e.X,y:e.Y,z:e.Z})}MVL.posTs=b.Timestamp}
+  if(loc.length)addLoc(loc);
+  // team radio
+  const caps=vals(st.TeamRadio&&st.TeamRadio.Captures);
+  if(caps.length!==MVL.radioN&&MVL.sessPath){MVL.radioN=caps.length;S.radio=caps.filter(c=>c&&c.Path).map(c=>({date:utc(c.Utc),t:T(utc(c.Utc)),driver_number:+c.RacingNumber,recording_url:'https://livetiming.formula1.com/static/'+MVL.sessPath+c.Path})).sort((a,b)=>a.t-b.t)}
+  if(!S.track.length&&Date.now()-MVL.trackTried>5000){MVL.trackTried=Date.now();mvTrackFromLaps()}
+}
+function mvTrackFromLaps(){ // build the circuit outline from a completed live lap
+  let best=null;for(const dn in S.laps)for(const l of S.laps[dn])if(l.d&&l.n>1&&!l.pit&&(!best||l.d<best.d))best={...l,dn};if(!best)return;
+  const pts=[];for(const [k,c] of S.chunks){const a=c[best.dn];if(a)for(const q of a)if(q.t>=best.s&&q.t<=best.s+best.d*1000+400)pts.push(q)}
+  pts.sort((a,b)=>a.t-b.t);if(pts.length>50){S.track=pts.map(q=>[q.x,q.y]);trackCum();geoAlign();fit();maybeAlign()}
 }
 function mvStart(){MV.on=true;mvSave();clearInterval(MV.timer);mvPoll();MV.timer=setInterval(mvPoll,2000)}
 function mvStop(){MV.on=false;mvSave();clearInterval(MV.timer);MV.ok=false}
@@ -1913,6 +1982,7 @@ function loop(ts){
   const dt=Math.min(250,ts-prev);prev=ts;frameDt=dt;
   if(S.sess&&S.playing){
     if(S.mode==='replay'){S.t+=dt*S.speed;if(S.t>=S.t1){S.t=S.t1;togglePlay(false)}}
+    else if(S.src==='mv'){const t=mvTrackNow();if(t!=null){const tgt=t-1200;S.t=Math.abs(tgt-S.t)>3000?tgt:S.t+dt+(tgt-S.t-dt)*.05}else S.t+=dt}
     else{S.t+=dt;if(S.maxT){if(S.t>S.maxT-1500)S.t=S.maxT-1500;if(S.t<S.maxT-12000)S.t=S.maxT-4000}}
   }
   needChunks();try{mvTick()}catch(e){}
@@ -1945,7 +2015,7 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{curView=b.dataset.v;
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+curView));lastGridLap=-1;if(curView==='map')fit();renderAll()});
 $('year').onchange=()=>loadYear($('year').value);
 $('load').onclick=()=>{const s=S.sessions[$('sess').value];if(s)loadSession(s)};
-$('liveBtn').onclick=()=>{if(S.mode==='live'){reset();S.mode='idle';setLive(false);status('Live gestopt');return}$('liveErr').textContent='';$('modal').classList.add('on')};
+$('liveBtn').onclick=()=>{if(S.mode==='live'){reset();S.mode='idle';setLive(false);status('Live gestopt');return}if(MV.on&&MV.ok&&MV.clock){startMvLive();return}$('liveErr').textContent='';$('modal').classList.add('on')};
 $('cancel').onclick=()=>$('modal').classList.remove('on');
 $('liveForm').onsubmit=async e=>{
   e.preventDefault();const u=$('user').value.trim(),p=$('pass').value,t=$('tok').value.trim();
