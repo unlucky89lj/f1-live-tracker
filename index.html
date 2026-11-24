@@ -159,6 +159,8 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 #onb{position:absolute;right:12px;top:64px;z-index:6;width:min(420px,46%);background:#000;border:1px solid #333846;border-radius:12px;overflow:hidden;display:none;box-shadow:0 8px 24px #000a}
 #onb.on{display:block}#onb .ot{display:flex;gap:4px;align-items:center;padding:5px;background:#111319}#onb .ot button{background:#1c1f27;border:1px solid #333846;color:#aab;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
 #onb.act{border-color:#ffd400;box-shadow:0 0 0 2px #ffd40066,0 8px 24px #000a}#onb #onbX{margin-left:6px;padding:1px 8px}
+#mvb.on{background:#7c3aed;border-color:#7c3aed;color:#fff}#mvb.wait{opacity:.7}#onb #onbMV{background:#7c3aed;border-color:#7c3aed;color:#fff;display:none}#onb.mv #onbMV{display:inline-block}
+#mvbox{position:absolute;left:50%;transform:translateX(-50%);top:64px;z-index:7;width:min(380px,90%);background:#111319;border:1px solid #7c3aed;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.45;display:none;box-shadow:0 8px 24px #000a}#mvbox.on{display:block}#mvbox b{color:#c4b5fd}#mvbox ol{margin:6px 0 6px 18px;padding:0}#mvbox .r{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}#mvbox label{display:flex;gap:6px;align-items:center;margin-top:4px}
 #onb .ot button.on{background:#e10600;border-color:#e10600;color:#fff}#onb .ot span{margin-left:auto;font-size:12px;font-weight:700;padding-right:4px}
 #onbc{display:block;width:100%;aspect-ratio:16/9}#onb small{position:absolute;left:8px;bottom:5px;font-size:10px;color:rgba(255,255,255,.55)}
 #tel{position:absolute;right:12px;bottom:12px;z-index:6;width:300px;background:rgba(14,16,20,.94);border:1px solid #333846;border-radius:12px;padding:8px 10px;display:none;box-shadow:0 8px 24px #000a}
@@ -261,10 +263,11 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
       <div id="mapwrap"><canvas id="map"></canvas></div>
       <div class="wx" id="wx"></div>
       <div class="toast" id="toast"></div>
-      <div id="onb"><div class="ot"><button data-m="helm" class="on">Helmcamera</button><button data-m="boven">Van boven</button><span id="onbN"></span><button id="onbX" title="sluiten">×</button></div><canvas id="onbc"></canvas><small>nagebouwd uit positiedata · geen echte beelden</small></div>
+      <div id="mvbox"></div>
+      <div id="onb"><div class="ot"><button data-m="helm" class="on">Helmcamera</button><button data-m="boven">Van boven</button><span id="onbN"></span><button id="onbMV" title="Open de echte onboard van deze rijder in MultiViewer">Echte onboard</button><button id="onbX" title="sluiten">×</button></div><canvas id="onbc"></canvas><small>nagebouwd uit positiedata · geen echte beelden</small></div>
       <div id="tel"><div class="th2"><b id="telN">–</b><span id="telG" class="dim"></span><button id="telX" aria-label="Sluiten">×</button></div><div class="tg"><div class="spd"><b id="telS">–</b><small>km/u</small></div><div class="gear"><b id="telGear">–</b><small>versn.</small></div><div class="bars"><div><span>Gas</span><i><u id="telT"></u></i></div><div><span>Rem</span><i><u id="telB" class="br"></u></i></div><div><span>Toeren</span><i><u id="telR" class="rp"></u></i></div></div><div id="telD" class="drs">DRS</div></div><canvas id="telc"></canvas></div>
 
-      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="battleb" title="Camera volgt het spannendste gevecht">Gevecht</button><button class="btn" id="secb" title="Mini-sectoren van de gekozen coureur op de baan">Sectoren</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
+      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="battleb" title="Camera volgt het spannendste gevecht">Gevecht</button><button class="btn" id="mvb" title="Echte F1 TV-beelden via MultiViewer (F1 TV Pro)">Echte beelden</button><button class="btn" id="secb" title="Mini-sectoren van de gekozen coureur op de baan">Sectoren</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
       <div class="empty" id="mapEmpty">Baan verschijnt zodra de sessie is geladen</div>
      </div>
      <div id="side">
@@ -1298,6 +1301,50 @@ function battleTarget(W,H){
 
 /* ---------- onboard / overhead view of the battle (rebuilt from positions, not video) ---------- */
 let ONBM='helm',ACT=null,ACTPREV=null;
+/* ---------- real F1 TV video through MultiViewer's local API (needs MultiViewer + F1 TV Pro on this computer) ---------- */
+const MV={on:false,ok:false,err:'',players:[],clock:null,auto:true,follow:true,mine:null,mineDn:null,lastSwap:0,want:null,wantAt:0,timer:null,sess:null};
+try{const o=JSON.parse(localStorage.getItem('mvset')||'{}');if(o.auto!=null)MV.auto=o.auto;if(o.follow!=null)MV.follow=o.follow}catch(e){}
+async function mvq(query,variables){const r=await fetch('http://localhost:10101/api/graphql',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,variables})});const j=await r.json();if(j.errors)throw new Error(j.errors[0].message);return j.data}
+async function mvPoll(){
+  try{const d=await mvq('{ players { id type driverData { driverNumber tla } streamData { contentId meetingKey sessionKey title } } f1LiveTimingClock { paused systemTime trackTime liveTimingStartTime } }');
+    MV.ok=true;MV.err='';MV.players=d.players||[];MV.clock=d.f1LiveTimingClock;MV.clockAt=Date.now();
+    if(MV.mine&&!MV.players.some(p=>String(p.id)===String(MV.mine))){MV.mine=null;MV.mineDn=null}
+    const sp=MV.players.find(p=>p.streamData&&p.streamData.sessionKey);MV.sess=sp?sp.streamData.sessionKey:null;
+    if(MV.sess&&(!S.sess||String(MV.sess)!==String(S.sess.session_key))&&MV.follow&&MV.loadingKey!==MV.sess){MV.loadingKey=MV.sess;api('sessions','session_key='+MV.sess).then(a=>{if(a&&a[0])loadSession(a[0])}).catch(()=>{})}
+  }catch(e){MV.ok=false;MV.err=e.message||String(e)}
+  mvUI()}
+function mvMain(){return MV.players.find(p=>String(p.id)!==String(MV.mine)&&p.streamData&&p.streamData.contentId)}
+function mvTrackNow(){const c=MV.clock;if(!c||!c.trackTime)return null;return +c.trackTime+(c.paused?0:Date.now()-+c.systemTime)}
+function mvSyncTime(){ // let the dashboard follow MultiViewer's replay clock so data and video line up
+  if(!MV.on||!MV.ok||!MV.follow||!S.sess||S.mode!=='replay')return;const t=mvTrackNow();if(t==null||t<S.t0-60000||t>S.t1+60000)return;
+  if(Math.abs(S.t-t)>1500)S.t=t;else S.t+=(t-S.t)*.1;if(MV.clock.paused===S.playing)togglePlay(!MV.clock.paused)}
+async function mvOnboard(dn,force){ // open (or swap to) the real onboard of this driver
+  if(!MV.on||!MV.ok)return;const m=mvMain();if(!m)return;if(!force&&String(MV.mineDn)===String(dn))return;if(!force&&Date.now()-MV.lastSwap<8000)return;
+  MV.lastSwap=Date.now();const old=MV.mine;
+  try{const d=await mvq('mutation($i: PlayerCreateInput!){ playerCreate(input:$i) }',{i:{contentId:m.streamData.contentId,driverNumber:+dn,alwaysOnTop:true}});MV.mine=d.playerCreate;MV.mineDn=dn;
+    setTimeout(()=>{mvq('mutation($id: ID!){ playerSync(id:$id) }',{id:m.id}).catch(()=>{});if(old)mvq('mutation($id: ID!){ playerDelete(id:$id) }',{id:old}).catch(()=>{})},1200)}catch(e){MV.err=e.message}
+  mvUI()}
+function mvTick(){ // called from the loop: follow clock and swap onboard on battles / overtakes
+  if(!MV.on)return;mvSyncTime();const p=window.ONBPAIR;
+  if(MV.auto&&p){const dn=p[1];if(MV.want!==dn){MV.want=dn;MV.wantAt=performance.now()}else if(performance.now()-MV.wantAt>1500)mvOnboard(dn)}}
+function mvUI(){
+  const b=$('mvb');b.classList.toggle('on',MV.on&&MV.ok);b.classList.toggle('wait',MV.on&&!MV.ok);b.textContent=MV.on?(MV.ok?'Echte beelden ✓':'Echte beelden …'):'Echte beelden';
+  $('onb').classList.toggle('mv',MV.on&&MV.ok);
+  const box=$('mvbox');if(!box.classList.contains('on'))return;
+  const m=mvMain();
+  box.innerHTML=`<b>Echte beelden via MultiViewer</b><br>`+(!MV.ok?`<span style="color:#fca5a5">Nog geen verbinding met MultiViewer op deze computer.</span><ol><li>Installeer en open <b>MultiViewer</b> (multiviewer.app) en log in met je F1 TV Pro-account.</li><li>Open daarin de race (live of terugkijken), bijvoorbeeld de hoofdfeed.</li><li>Gebruik dit dashboard op dezelfde computer in Chrome of Edge. Vraagt de browser om toegang tot apparaten in je netwerk, kies dan Toestaan.</li></ol><small style="color:#99a">${MV.err?('Melding: '+MV.err):''}</small>`
+    :`<span style="color:#86efac">Verbonden.</span> ${m?('Open in MultiViewer: '+(m.streamData.title||'video')):'Open in MultiViewer eerst een video van de race.'}<br>${MV.mineDn?('Onboard nu: '+((S.drivers[MV.mineDn]||{}).name_acronym||MV.mineDn)):''}
+      <label><input type="checkbox" id="mvAuto" ${MV.auto?'checked':''}> Bij gevecht of inhaalactie automatisch de echte onboard openen</label>
+      <label><input type="checkbox" id="mvFollow" ${MV.follow?'checked':''}> Dashboard loopt gelijk met MultiViewer (zelfde sessie en tijd)</label>`)+
+    `<div class="r"><button class="btn" id="mvOff">${MV.on?'Uitzetten':'Aanzetten'}</button><button class="btn" id="mvClose">Sluiten</button></div>`;
+  const sv=()=>{try{localStorage.setItem('mvset',JSON.stringify({auto:MV.auto,follow:MV.follow}))}catch(e){}};
+  const a=$('mvAuto');if(a)a.onchange=()=>{MV.auto=a.checked;sv()};const f=$('mvFollow');if(f)f.onchange=()=>{MV.follow=f.checked;sv()};
+  $('mvOff').onclick=()=>{MV.on=!MV.on;if(MV.on)mvStart();else mvStop();mvUI()};$('mvClose').onclick=()=>{box.classList.remove('on')};
+}
+function mvStart(){MV.on=true;clearInterval(MV.timer);mvPoll();MV.timer=setInterval(mvPoll,2000)}
+function mvStop(){MV.on=false;clearInterval(MV.timer);MV.ok=false}
+$('mvb').onclick=()=>{const box=$('mvbox');const open=!box.classList.contains('on');box.classList.toggle('on',open);if(open&&!MV.on)mvStart();mvUI()};
+
 function detectAction(rows){ // a real overtake between two close cars (not a pit stop) → show it onboard for a few seconds
   if(!isRace())return;const now={},P=ACTPREV;for(const r of rows)if(r.p)now[r.dn]=r.p;ACTPREV={t:S.t,p:now};
   if(!P||Math.abs(S.t-P.t)>3000||!S.playing)return;if(ACT&&S.t<ACT.until)return;
@@ -1306,7 +1353,7 @@ function detectAction(rows){ // a real overtake between two close cars (not a pi
     const g=b.iv&&b.iv.int;if(typeof g==='number'&&g>2)continue;if(pitNear(r.dn)||pitNear(b.dn)||r.cur<1)continue;
     ACT={a:r.dn,b:b.dn,at:S.t,until:S.t+9000};$('onb').classList.add('act');break}
 }
-document.querySelector('#onb .ot').onclick=e=>{if(e.target.id==='onbX'){if(ACT)ACT.until=0;if(BATTLE)$('battleb').click();return}const b=e.target.closest('[data-m]');if(!b)return;ONBM=b.dataset.m;for(const x of document.querySelectorAll('#onb .ot button'))x.classList.toggle('on',x===b)};
+document.querySelector('#onb .ot').onclick=e=>{if(e.target.id==='onbMV'){if(window.ONBPAIR)mvOnboard(ONBPAIR[1],true);return}if(e.target.id==='onbX'){if(ACT)ACT.until=0;if(BATTLE)$('battleb').click();return}const b=e.target.closest('[data-m]');if(!b)return;ONBM=b.dataset.m;for(const x of document.querySelectorAll('#onb .ot button'))x.classList.toggle('on',x===b)};
 function nearestIdx(x,y){let bi=0,bd=1e18;const tr=S.track;for(let k=0;k<tr.length;k++){const d=(tr[k][0]-x)**2+(tr[k][1]-y)**2;if(d<bd){bd=d;bi=k}}return bi}
 function drawRearCar(g,x,y,sz,c,rain,blink){ // F1 car seen from behind, roughly to scale (1 unit ≈ 4 cm)
   g.save();g.translate(x,y);g.scale(sz,sz);
@@ -1857,7 +1904,7 @@ function loop(ts){
     if(S.mode==='replay'){S.t+=dt*S.speed;if(S.t>=S.t1){S.t=S.t1;togglePlay(false)}}
     else{S.t+=dt;if(S.maxT){if(S.t>S.maxT-1500)S.t=S.maxT-1500;if(S.t<S.maxT-12000)S.t=S.maxT-4000}}
   }
-  needChunks();
+  needChunks();try{mvTick()}catch(e){}
   acc+=dt;if(acc>170){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
   if(curView==='circle')drawCircle();
