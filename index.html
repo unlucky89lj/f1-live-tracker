@@ -97,7 +97,10 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 #ragow #rago{position:absolute;left:0;visibility:hidden}
 #rago.live{color:#d7262e}#rspd:not(:empty)::before{content:''}
 #radarpane.cwmode #rtl{display:none}
-#radio{position:relative;flex:1 1 0;min-height:120px;display:flex;flex-direction:column;background:#111319;border:1px solid #2a2d38;border-radius:12px;overflow:hidden}
+#minicirc{order:2;position:relative;flex:1 1 0;min-height:220px;background:rgba(17,19,25,.92);border:1px solid #2a2d38;border-radius:12px;overflow:hidden}
+#minicirc .mch{position:absolute;left:10px;top:7px;right:10px;display:flex;justify-content:space-between;font-size:12px;z-index:1;pointer-events:none}#minicirc .mch span{color:var(--mute);font-size:11px}
+#circ2{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+#radio{order:1;position:relative;flex:0 0 34%;min-height:120px;display:flex;flex-direction:column;background:#111319;border:1px solid #2a2d38;border-radius:12px;overflow:hidden}
 #radio.off{display:none}
 #radio .rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #2a2d38;font-size:13px}
 #radio .rh label{font-size:12px;color:var(--mute);display:flex;align-items:center;gap:5px;cursor:pointer}
@@ -245,6 +248,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
      </div>
      <div id="side">
 
+      <div id="minicirc"><div class="mch"><b>Cirkel · pitvenster</b><span>klik een coureur</span></div><canvas id="circ2"></canvas></div>
       <div id="radio"><div class="rh"><b>Boardradio</b><span class="rhb"><button class="btn" id="rtx" title="Uitgeschreven tekst bij elk bericht dat je afspeelt">Tekst</button><label title="Berichten stil uitschrijven, zonder geluid"><input type="checkbox" id="ronly"> alleen tekst</label><label><input type="checkbox" id="rauto"> automatisch afspelen</label></span></div><div id="rtxs">Tekst staat uit. Klik op <b>Tekst</b>, kies <b>dit tabblad</b> en zet <b>tabbladaudio delen</b> aan. Speel daarna een bericht af.</div><div id="rlist"><div class="dim">Nog geen boardradio</div></div></div>
 
      </div>
@@ -1201,10 +1205,10 @@ new ResizeObserver(()=>{fit();rmap&&rmap.invalidateSize()}).observe(document.get
 const CC=$('circ'),cx2=CC.getContext('2d');let CHIT=[];
 function lapRef(){let L=[];for(const dn in S.laps)for(const l of S.laps[dn])if(l.d&&l.e&&l.e<=S.t&&!l.pit&&l.d<300)L.push([l.e,l.d]);L.sort((a,b)=>b[0]-a[0]);L=L.slice(0,40).map(x=>x[1]).sort((a,b)=>a-b);return L.length?L[Math.floor(L.length*.3)]:90}
 function trackFrac(dn){const w=where(dn,S.t);if(!w||!view||!view.sp)return null;const p=P(w.x,w.y);let bi=0,bd=1e12;const sp=view.sp;for(let k=0;k<sp.length;k+=2){const d=(sp[k][0]-p[0])**2+(sp[k][1]-p[1])**2;if(d<bd){bd=d;bi=k}}return bi/sp.length}
-function drawCircle(){
-  const dpr=devicePixelRatio||1,W=CC.clientWidth,H=CC.clientHeight;if(!W||!H)return;if(CC.width!==W*dpr){CC.width=W*dpr;CC.height=H*dpr}
-  const g=cx2;g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);if(!S.sess||!lastRows)return;
-  const R=Math.max(80,Math.min(W,H)/2-105),X=W/2,Y=H/2+6,ref=lapRef(),st=flagState(S.t),rows=lastRows;
+function drawCircle(cv=CC,compact=false){
+  const dpr=devicePixelRatio||1,CW=cv.clientWidth,CH=cv.clientHeight;if(!CW||!CH)return;if(cv.width!==Math.round(CW*dpr)||cv.height!==Math.round(CH*dpr)){cv.width=Math.round(CW*dpr);cv.height=Math.round(CH*dpr)}
+  const g=cv.getContext('2d'),k=compact?Math.min(CW,CH)/470:1,W=CW/k,H=CH/k;g.setTransform(dpr*k,0,0,dpr*k,0,0);g.clearRect(0,0,W,H);const HIT=[];if(!S.sess||!lastRows)return;
+  const R=Math.max(80,Math.min(W,H)/2-(compact?80:105)),X=W/2,Y=H/2+(compact?14:6),ref=lapRef(),st=flagState(S.t),rows=lastRows;
   const ang=sec=>-Math.PI/2+sec/ref*Math.PI*2,pt=(a,r)=>[X+Math.cos(a)*r,Y+Math.sin(a)*r];
   // gaps
   const lead=rows[0],lf=lead?trackFrac(lead.dn):null,cars=[];
@@ -1233,11 +1237,11 @@ function drawCircle(){
   g.font='700 13px "Titillium Web",sans-serif';const sw=g.measureText(stt[0]).width+16;g.fillStyle=stt[1]+'33';g.fillRect(X-sw/2,Y+R*.1,sw,22);g.fillStyle=stt[1];g.fillText(stt[0],X,Y+R*.1+11);
   g.fillStyle='#8a8f9c';g.font='600 12px "Titillium Web",sans-serif';g.fillText('◷ '+fmtLap(ref),X,Y+R*.1+38);
   // cars + labels (labels pushed outward so they don't overlap)
-  CHIT=[];const placed=[];
+  const placed=[];
   for(const c of [...cars].reverse()){const isSel=c===sel,[x,y]=pt(c.a,R);
     g.beginPath();g.arc(x,y,isSel?10:7,0,7);g.fillStyle=col(c.r.d);g.fill();g.lineWidth=isSel?3:1.5;g.strokeStyle=isSel?'#fff':'#000';g.stroke();
     if(c.r.best!=null&&rows.every(o=>o.best==null||o.best>=c.r.best)){g.save();g.shadowColor='#b45cff';g.shadowBlur=14;g.strokeStyle='#c78bff';g.lineWidth=2;g.beginPath();g.arc(x,y,13,0,7);g.stroke();g.restore()}
-    const t1=c.r.d.name_acronym||c.r.dn,t2=c===cars[0]?'':(c.lapped&&typeof (c.r.iv&&c.r.iv.gap)==='string'?c.r.iv.gap:'+'+c.g.toFixed(1));
+    const t1=c.r.d.name_acronym||c.r.dn,t2=c===cars[0]||(compact&&!isSel)?'':(c.lapped&&typeof (c.r.iv&&c.r.iv.gap)==='string'?c.r.iv.gap:'+'+c.g.toFixed(1));
     g.font='700 12px "Titillium Web",sans-serif';const w=Math.max(g.measureText(t1).width,t2?g.measureText(t2).width*.85:0)+12,h=t2?30:18;
     const ok=b=>b[0]>=2&&b[1]>=2&&b[0]+b[2]<=W-2&&b[1]+b[3]<=H-2&&!placed.some(q=>b[0]<q[0]+q[2]+2&&q[0]<b[0]+b[2]+2&&b[1]<q[1]+q[3]+2&&q[1]<b[1]+b[3]+2);
     let b=null;search:for(const rad of [34,52,70,88,-38,-58,-78,106,124])for(const da of [0,.06,-.06,.12,-.12,.18,-.18,.26,-.26]){const [lx,ly]=pt(c.a+da,R+(isSel&&rad>0?rad+26:rad));const t=[lx-w/2,ly-h/2,w,h];if(ok(t)){b=t;break search}}
@@ -1245,9 +1249,10 @@ function drawCircle(){
     placed.push(b);g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=1;g.beginPath();g.moveTo(...pt(c.a,R+9));g.lineTo(b[0]+w/2,b[1]+h/2);g.stroke();
     g.fillStyle=col(c.r.d);g.beginPath();g.roundRect?g.roundRect(b[0],b[1],w,h,5):g.rect(b[0],b[1],w,h);g.fill();
     g.fillStyle='#fff';g.shadowColor='#000';g.shadowBlur=3;g.fillText(t1,b[0]+w/2,b[1]+(t2?9:9.5));if(t2){g.font='600 10px "Titillium Web",sans-serif';g.fillText(t2,b[0]+w/2,b[1]+22)}g.shadowBlur=0;
-    CHIT.push({dn:c.r.dn,b:[Math.min(b[0],x-10),Math.min(b[1],y-10),Math.max(b[0]+w,x+10)-Math.min(b[0],x-10),Math.max(b[1]+h,y+10)-Math.min(b[1],y-10)]});}
+    HIT.push({dn:c.r.dn,b:[Math.min(b[0],x-10)*k,Math.min(b[1],y-10)*k,(Math.max(b[0]+w,x+10)-Math.min(b[0],x-10))*k,(Math.max(b[1]+h,y+10)-Math.min(b[1],y-10))*k]});}
+  cv._hit=HIT;if(cv===CC)CHIT=HIT;
 }
-CC.addEventListener('click',e=>{const r=CC.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const h=CHIT.find(c=>x>=c.b[0]&&x<=c.b[0]+c.b[2]&&y>=c.b[1]&&y<=c.b[1]+c.b[3]);if(h){S.sel=S.sel==h.dn?null:String(h.dn);renderAll()}});
+for(const cvx of [CC,$('circ2')])cvx.addEventListener('click',e=>{const r=cvx.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const h=(cvx._hit||[]).find(c=>x>=c.b[0]&&x<=c.b[0]+c.b[2]&&y>=c.b[1]&&y<=c.b[1]+c.b[3]);if(h){S.sel=S.sel==h.dn?null:String(h.dn);renderAll()}});
 
 /* ---------- rendering ---------- */
 const cv=$('map'),ctx=cv.getContext('2d');let view=null;
@@ -1268,6 +1273,14 @@ function fit(){
 }
 /* realistic static track layer: grass, run-off, white lines, asphalt, kerbs, chequered line */
 let TL=null;
+/* ---- night races: is the sun down at the circuit? ---- */
+function sunElev(lat,lon,ms){const d=ms/864e5-10957.5,g=(357.529+.98560028*d)*Math.PI/180,q=280.459+.98564736*d,L=(q+1.915*Math.sin(g)+.02*Math.sin(2*g))*Math.PI/180,e=(23.439-.00000036*d)*Math.PI/180;
+  const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L)),dec=Math.asin(Math.sin(e)*Math.sin(L)),gmst=(18.697374558+24.06570982441908*d)%24,ha=((gmst*15+lon)*Math.PI/180)-ra,la=lat*Math.PI/180;
+  return Math.asin(Math.sin(la)*Math.sin(dec)+Math.cos(la)*Math.cos(dec)*Math.cos(ha))*180/Math.PI}
+let NIGHT=false;
+function isNight(){const c=circ();return !!(c&&S.t&&sunElev(c[0],c[1],S.t)<-3)}
+setInterval(()=>{const n=isNight();if(n!==NIGHT){NIGHT=n;if(view)fit()}},2000);
+
 /* ---- real satellite image under the track ---- */
 const GEO={fit:null,on:true,tiles:new Map(),key:''};try{GEO.on=localStorage.getItem('f1realsat')!=='0'}catch(e){}
 function resample(pts,N){const cum=[0];for(let i=1;i<=pts.length;i++){const a=pts[i-1],b=pts[i%pts.length];cum.push(cum[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1]))}
@@ -1307,12 +1320,19 @@ function drawSatellite(g,W,H,dpr){
   const cs=[[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>screenToLL(x,y)),las=cs.map(c=>c[0]),los=cs.map(c=>c[1]);
   const x0=Math.floor(lon2t(Math.min(...los),z)),x1=Math.floor(lon2t(Math.max(...los),z)),y0=Math.floor(lat2t(Math.max(...las),z)),y1=Math.floor(lat2t(Math.min(...las),z));
   if((x1-x0+1)*(y1-y0+1)>140)return false;
-  g.save();g.filter='brightness(.62) saturate(.85) contrast(1.05)';
+  const night=isNight(),drawn=[];
+  g.save();g.filter=night?'brightness(.2) saturate(.35)':'brightness(.62) saturate(.85) contrast(1.05)';
   for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const key=z+'/'+y+'/'+x;let im=GEO.tiles.get(key);
     if(!im){im=new Image();im.onload=()=>{if(!satTimer)satTimer=setTimeout(()=>{satTimer=null;fit()},400)};im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${key}`;GEO.tiles.set(key,im);if(GEO.tiles.size>400)GEO.tiles.delete(GEO.tiles.keys().next().value)}
     if(!im.complete||!im.naturalWidth)continue;
     const p0=llToScreen(t2lat(y,z),t2lon(x,z)),p1=llToScreen(t2lat(y,z),t2lon(x+1,z)),p2=llToScreen(t2lat(y+1,z),t2lon(x,z));
-    g.setTransform(dpr*(p1[0]-p0[0])/256,dpr*(p1[1]-p0[1])/256,dpr*(p2[0]-p0[0])/256,dpr*(p2[1]-p0[1])/256,dpr*p0[0],dpr*p0[1]);g.drawImage(im,-.5,-.5,257,257)}
+    const m=[dpr*(p1[0]-p0[0])/256,dpr*(p1[1]-p0[1])/256,dpr*(p2[0]-p0[0])/256,dpr*(p2[1]-p0[1])/256,dpr*p0[0],dpr*p0[1]];g.setTransform(...m);g.drawImage(im,-.5,-.5,257,257);drawn.push([im,m])}
+  if(night){
+    // blue night tint, then city lights: only the brightest roofs and roads light up in sodium orange
+    g.setTransform(1,0,0,1,0,0);g.filter='none';g.fillStyle='rgba(8,18,48,.45)';g.fillRect(0,0,TL.width,TL.height);
+    g.globalCompositeOperation='lighter';g.globalAlpha=.55;g.filter='grayscale(1) brightness(.75) contrast(6) sepia(1) saturate(5) hue-rotate(-12deg) blur(.6px)';
+    for(const [im,m] of drawn){g.setTransform(...m);g.drawImage(im,-.5,-.5,257,257)}
+    g.globalCompositeOperation='source-over';g.globalAlpha=1}
   g.restore();g.setTransform(dpr,0,0,dpr,0,0);return true;
 }
 function noisePat(g,base,amp,size,dots){
@@ -1356,6 +1376,14 @@ function buildTrackLayer(W,H,dpr){
   // 6. kerbs inside and outside of corners
   for(const off of [7.4,-7.4])for(const r of runs(corner,off)){if(r.pts.length<3)continue;line(r.pts);
     g.lineCap='butt';g.strokeStyle='#d0202a';g.lineWidth=off>0?3.6:2.6;g.stroke();g.setLineDash([3.5,3.5]);g.strokeStyle='#f4f4f4';g.stroke();g.setLineDash([]);g.lineCap='round'}
+  if(isNight()){ // floodlit circuit: warm glow along the tarmac and a light mast every ~45 px
+    g.save();g.globalCompositeOperation='lighter';path();g.shadowColor='rgba(255,210,140,.75)';g.shadowBlur=22;g.strokeStyle='rgba(255,225,180,.12)';g.lineWidth=18;g.stroke();
+    g.shadowBlur=0;path();g.strokeStyle='rgba(255,240,215,.08)';g.lineWidth=12;g.stroke();
+    let acc=0;for(let i=1;i<n;i++){acc+=Math.hypot(Sp[i][0]-Sp[i-1][0],Sp[i][1]-Sp[i-1][1]);if(acc<45)continue;acc=0;
+      const f=info[i],side=(i%2?1:-1),x=f.b[0]-f.ty*16*side,y=f.b[1]+f.tx*16*side,rg=g.createRadialGradient(x,y,0,x,y,22);
+      rg.addColorStop(0,'rgba(255,245,220,.75)');rg.addColorStop(.25,'rgba(255,220,160,.28)');rg.addColorStop(1,'rgba(255,200,120,0)');g.fillStyle=rg;g.beginPath();g.arc(x,y,22,0,7);g.fill();
+      g.fillStyle='#fffbe8';g.beginPath();g.arc(x,y,1.6,0,7);g.fill()}
+    g.restore()}
   // 7. start/finish: chequered line, grid boxes, arrow
   const [sx,sy]=Sp[0],[nx,ny]=Sp[Math.min(3,n-1)],ang=Math.atan2(ny-sy,nx-sx);
   g.save();g.translate(sx,sy);g.rotate(ang);const q=1.7;
@@ -1488,6 +1516,7 @@ function loop(ts){
   acc+=dt;if(acc>300){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
   if(curView==='circle')drawCircle();
+  if(curView==='map'&&(loop.c=(loop.c||0)+1)%3===0)drawCircle($('circ2'),true);
   if(curView==='map'){if((loop.f=(loop.f||0)+1)%2===0)drawDrops(dt*2);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
   requestAnimationFrame(loop);
 }
