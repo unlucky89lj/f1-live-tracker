@@ -1302,20 +1302,21 @@ function battleTarget(W,H){
 /* ---------- onboard / overhead view of the battle (rebuilt from positions, not video) ---------- */
 let ONBM='helm',ACT=null,ACTPREV=null;
 /* ---------- real F1 TV video through MultiViewer's local API (needs MultiViewer + F1 TV Pro on this computer) ---------- */
-const MV={on:false,ok:false,err:'',players:[],clock:null,auto:true,follow:true,mine:null,mineDn:null,lastSwap:0,want:null,wantAt:0,timer:null,sess:null};
+const MV={made:new Set(),on:false,ok:false,err:'',players:[],clock:null,auto:true,follow:true,mine:null,mineDn:null,lastSwap:0,want:null,wantAt:0,timer:null,sess:null};
 try{const o=JSON.parse(localStorage.getItem('mvset')||'{}');if(o.auto!=null)MV.auto=o.auto;if(o.follow!=null)MV.follow=o.follow}catch(e){}
 async function mvq(query,variables){const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),5000);const r=await fetch('http://127.0.0.1:10102/api/graphql',{signal:ctl.signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,variables})});clearTimeout(to);const j=await r.json();if(j.errors)throw new Error(j.errors[0].message);return j.data}
 async function mvPoll(){
   try{const d=await mvq('{ players { id type driverData { driverNumber tla } streamData { contentId meetingKey sessionKey title } } f1LiveTimingClock { paused systemTime trackTime liveTimingStartTime } }');
     MV.ok=true;MV.err='';MV.players=d.players||[];MV.clock=d.f1LiveTimingClock;MV.clockAt=Date.now();
-    if(MV.mine&&!MV.players.some(p=>String(p.id)===String(MV.mine))){MV.mine=null;MV.mineDn=null}
+    if(MV.mine&&Date.now()-MV.lastSwap>6000&&!MV.players.some(p=>String(p.id)===String(MV.mine))){MV.mine=null;MV.mineDn=null}
+    for(const id of [...MV.made])if(String(id)!==String(MV.mine)&&MV.players.some(p=>String(p.id)===String(id))){MV.made.delete(id);mvq('mutation($id: ID!){ playerDelete(id:$id) }',{id}).catch(()=>{})}
     const sp=MV.players.find(p=>p.streamData&&p.streamData.sessionKey);MV.sess=sp?sp.streamData.sessionKey:null;
     if(MV.sess&&(!S.sess||String(MV.sess)!==String(S.sess.session_key))&&MV.follow&&MV.loadingKey!==MV.sess){MV.loadingKey=MV.sess;api('sessions','session_key='+MV.sess).then(a=>{if(a&&a[0])loadSession(a[0])}).catch(()=>{})}
   }catch(e){MV.ok=false;MV.err=e.message||String(e);MV.blocked=false;MV.helper=false;
     try{const c2=new AbortController();setTimeout(()=>c2.abort(),2500);const h=await fetch('http://127.0.0.1:10102/status',{signal:c2.signal});MV.helper=h.ok}catch(e3){}
     if(!MV.helper)try{await fetch('http://127.0.0.1:10101/api/graphql',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:'{}'});MV.blocked=true}catch(e2){}}
   mvUI()}
-function mvMain(){return MV.players.find(p=>String(p.id)!==String(MV.mine)&&p.streamData&&p.streamData.contentId)}
+function mvMain(){const ok=p=>!MV.made.has(String(p.id))&&String(p.id)!==String(MV.mine)&&p.streamData&&p.streamData.contentId;return MV.players.find(p=>ok(p)&&p.type!=='OBC')||MV.players.find(ok)}
 function mvTrackNow(){const c=MV.clock;if(!c||!c.trackTime)return null;return +c.trackTime+(c.paused?0:Date.now()-+c.systemTime)}
 function mvSyncTime(){ // let the dashboard follow MultiViewer's replay clock so data and video line up
   if(!MV.on||!MV.ok||!MV.follow||!S.sess||S.mode!=='replay')return;const t=mvTrackNow();if(t==null||t<S.t0-60000||t>S.t1+60000)return;
@@ -1323,8 +1324,8 @@ function mvSyncTime(){ // let the dashboard follow MultiViewer's replay clock so
 async function mvOnboard(dn,force){ // open (or swap to) the real onboard of this driver
   if(!MV.on||!MV.ok)return;const m=mvMain();if(!m)return;if(!force&&String(MV.mineDn)===String(dn))return;if(!force&&Date.now()-MV.lastSwap<8000)return;
   MV.lastSwap=Date.now();const old=MV.mine;
-  try{const d=await mvq('mutation($i: PlayerCreateInput!){ playerCreate(input:$i) }',{i:{contentId:m.streamData.contentId,driverNumber:+dn,alwaysOnTop:true}});MV.mine=d.playerCreate;MV.mineDn=dn;
-    setTimeout(()=>{mvq('mutation($id: ID!){ playerSync(id:$id) }',{id:m.id}).catch(()=>{});if(old)mvq('mutation($id: ID!){ playerDelete(id:$id) }',{id:old}).catch(()=>{})},1200)}catch(e){MV.err=e.message}
+  try{const d=await mvq('mutation($i: PlayerCreateInput!){ playerCreate(input:$i) }',{i:{contentId:m.streamData.contentId,driverNumber:+dn,alwaysOnTop:true}});MV.mine=d.playerCreate;MV.mineDn=dn;MV.made.add(String(d.playerCreate));if(old)MV.made.add(String(old));
+    setTimeout(()=>{mvq('mutation($id: ID!){ playerSync(id:$id) }',{id:m.id}).catch(()=>{});},1200)}catch(e){MV.err=e.message}
   mvUI()}
 function mvTick(){ // called from the loop: follow clock and swap onboard on battles / overtakes
   if(!MV.on)return;mvSyncTime();const p=window.ONBPAIR;
