@@ -156,6 +156,10 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 .cmph{display:flex;flex-wrap:wrap;gap:8px;align-items:center}#cmpc{flex:1;min-height:420px;width:100%}#tyrec{flex:0 0 52%;min-height:300px;width:100%}
 .tsel{display:flex;flex-wrap:wrap;gap:4px}.tsel button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;color:var(--mute)}.tsel button.on{color:#fff}
 #tyreTab table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}#tyreTab td,#tyreTab th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}#tyreTab th{color:var(--mute);font-weight:600}
+#onb{position:absolute;right:12px;top:64px;z-index:6;width:min(420px,46%);background:#000;border:1px solid #333846;border-radius:12px;overflow:hidden;display:none;box-shadow:0 8px 24px #000a}
+#onb.on{display:block}#onb .ot{display:flex;gap:4px;align-items:center;padding:5px;background:#111319}#onb .ot button{background:#1c1f27;border:1px solid #333846;color:#aab;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
+#onb .ot button.on{background:#e10600;border-color:#e10600;color:#fff}#onb .ot span{margin-left:auto;font-size:12px;font-weight:700;padding-right:4px}
+#onbc{display:block;width:100%;aspect-ratio:16/9}#onb small{position:absolute;left:8px;bottom:5px;font-size:10px;color:rgba(255,255,255,.55)}
 #tel{position:absolute;right:12px;bottom:12px;z-index:6;width:300px;background:rgba(14,16,20,.94);border:1px solid #333846;border-radius:12px;padding:8px 10px;display:none;box-shadow:0 8px 24px #000a}
 #tel.on{display:block}#tel .th2{display:flex;align-items:center;gap:8px}#tel .th2 b{font-size:15px}#tel .th2 span{flex:1;font-size:12px}#telX{background:none;border:0;color:var(--mute);font-size:18px;cursor:pointer}
 #tel .tg{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;margin:6px 0}
@@ -256,6 +260,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
       <div id="mapwrap"><canvas id="map"></canvas></div>
       <div class="wx" id="wx"></div>
       <div class="toast" id="toast"></div>
+      <div id="onb"><div class="ot"><button data-m="helm" class="on">Helmcamera</button><button data-m="boven">Van boven</button><span id="onbN"></span></div><canvas id="onbc"></canvas><small>nagebouwd uit positiedata · geen echte beelden</small></div>
       <div id="tel"><div class="th2"><b id="telN">–</b><span id="telG" class="dim"></span><button id="telX" aria-label="Sluiten">×</button></div><div class="tg"><div class="spd"><b id="telS">–</b><small>km/u</small></div><div class="gear"><b id="telGear">–</b><small>versn.</small></div><div class="bars"><div><span>Gas</span><i><u id="telT"></u></i></div><div><span>Rem</span><i><u id="telB" class="br"></u></i></div><div><span>Toeren</span><i><u id="telR" class="rp"></u></i></div></div><div id="telD" class="drs">DRS</div></div><canvas id="telc"></canvas></div>
 
       <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="battleb" title="Camera volgt het spannendste gevecht">Gevecht</button><button class="btn" id="secb" title="Mini-sectoren van de gekozen coureur op de baan">Sectoren</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
@@ -1280,8 +1285,62 @@ $('battleb').onclick=()=>{BATTLE=!BATTLE;$('battleb').classList.toggle('on',BATT
 function battleTarget(W,H){
   if(!BATTLE||!lastRows||!isRace())return null;let best=null;
   lastRows.forEach((r,i)=>{if(i===0)return;const v=r.iv&&r.iv.int;if(typeof v!=='number'||v>1.2)return;const a=lastRows[i-1],wa=where(a.dn,S.t),wb=where(r.dn,S.t);if(!wa||!wb)return;
-    const sc=v+i*.08;if(!best||sc<best.sc){const pa=P(wa.x,wa.y),pb=P(wb.x,wb.y);best={sc,x:(pa[0]+pb[0])/2,y:(pa[1]+pb[1])/2,label:`P${a.p||i} ${a.d.name_acronym}  ⟷  P${r.p||i+1} ${r.d.name_acronym}   ${v.toFixed(1)} s`}}});
+    const sc=v+i*.08;if(!best||sc<best.sc){const pa=P(wa.x,wa.y),pb=P(wb.x,wb.y);best={sc,a:a.dn,b:r.dn,gap:v,x:(pa[0]+pb[0])/2,y:(pa[1]+pb[1])/2,label:`P${a.p||i} ${a.d.name_acronym}  ⟷  P${r.p||i+1} ${r.d.name_acronym}   ${v.toFixed(1)} s`}}});
   return best;
+}
+
+/* ---------- onboard / overhead view of the battle (rebuilt from positions, not video) ---------- */
+let ONBM='helm';
+document.querySelector('#onb .ot').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;ONBM=b.dataset.m;for(const x of document.querySelectorAll('#onb .ot button'))x.classList.toggle('on',x===b)};
+function nearestIdx(x,y){let bi=0,bd=1e18;const tr=S.track;for(let k=0;k<tr.length;k++){const d=(tr[k][0]-x)**2+(tr[k][1]-y)**2;if(d<bd){bd=d;bi=k}}return bi}
+function drawRearCar(g,x,y,sz,c){ // F1 car seen from behind
+  g.save();g.translate(x,y);g.scale(sz,sz);
+  g.fillStyle='rgba(0,0,0,.45)';g.beginPath();g.ellipse(0,1,26,4,0,0,7);g.fill();
+  g.fillStyle='#111';g.fillRect(-25,-12,11,13);g.fillRect(14,-12,11,13);          // rear tyres
+  g.fillStyle=c;g.beginPath();g.moveTo(-12,0);g.lineTo(-9,-14);g.lineTo(9,-14);g.lineTo(12,0);g.closePath();g.fill(); // body
+  g.fillStyle='#222';g.fillRect(-3,-9,6,8);                                       // gearbox / light area
+  g.fillStyle='#ff2a2a';g.fillRect(-1.5,-6,3,2.2);                                // rain light
+  g.fillStyle=c;g.fillRect(-15,-24,30,4);g.fillStyle='#111';g.fillRect(-15,-24,2,9);g.fillRect(13,-24,2,9); // rear wing
+  g.fillStyle='rgba(0,0,0,.6)';g.fillRect(-4,-21,8,7);g.restore();
+}
+function drawOnboard(){
+  const el=$('onb'),pair=CAM.pair;if(!BATTLE||!pair||curView!=='map'){el.classList.remove('on');return}el.classList.add('on');
+  const [dA,dB,gap]=pair,lead=S.drivers[dA]||{},chase=S.drivers[dB]||{};
+  $('onbN').innerHTML=`<span style="color:${col(chase)}">${chase.name_acronym||dB}</span> achter <span style="color:${col(lead)}">${lead.name_acronym||dA}</span> · ${gap.toFixed(1)} s`;
+  const c=$('onbc'),dpr=devicePixelRatio||1,W=c.clientWidth,H=c.clientHeight;if(!W||!H)return;if(c.width!==Math.round(W*dpr)){c.width=Math.round(W*dpr);c.height=Math.round(H*dpr)}
+  const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);const wa=where(dA,S.t),wb=where(dB,S.t);if(!wa||!wb||!S.track.length)return;
+  const night=isNight();
+  if(ONBM==='boven'){ // close overhead shot of the fight from the track layer
+    g.fillStyle='#000';g.fillRect(0,0,W,H);if(!TL||!view)return;const pa=P(wa.x,wa.y),pb=P(wb.x,wb.y),cx=(pa[0]+pb[0])/2,cy=(pa[1]+pb[1])/2,z=Math.max(3,Math.min(8,W/(Math.hypot(pa[0]-pb[0],pa[1]-pb[1])*3+30)));
+    g.save();g.translate(W/2,H/2);g.scale(z,z);g.translate(-cx,-cy);g.drawImage(TL,0,0,TL.width/dpr,TL.height/dpr);
+    for(const [dn,w] of [[dB,wb],[dA,wa]]){const p=P(w.x,w.y),w0=where(dn,S.t-250),p0=w0?P(w0.x,w0.y):p;g.save();g.translate(p[0],p[1]);g.rotate(Math.atan2(p[1]-p0[1],p[0]-p0[0]));drawF1Car(g,col(S.drivers[dn]||{}),.55,false);g.restore()}
+    g.restore();return}
+  // helmet camera of the chasing car
+  const tr=S.track,n=tr.length,i0=nearestIdx(wb.x,wb.y),hx=tr[(i0+3)%n][0]-tr[(i0+n-3)%n][0],hy=tr[(i0+3)%n][1]-tr[(i0+n-3)%n][1],hl=Math.hypot(hx,hy)||1,fx=hx/hl,fy=hy/hl;
+  const ex=wb.x-fx*25,ey=wb.y-fy*25,F=W*.75,hor=H*.4,eye=22; // dm: eye ~1.2 m above the track
+  const proj=(x,y,z)=>{const dx=x-ex,dy=y-ey,f=dx*fx+dy*fy,l=dx*fy-dy*fx;return f<2?null:[W/2+l/f*F,hor+(eye-z)/f*F,f]};
+  const sky=g.createLinearGradient(0,0,0,hor);if(night){sky.addColorStop(0,'#02040c');sky.addColorStop(1,'#1a2240')}else{sky.addColorStop(0,'#5d8fd1');sky.addColorStop(1,'#c9dcf0')}
+  g.fillStyle=sky;g.fillRect(0,0,W,hor);g.fillStyle=night?'#0d1a12':'#3f6b39';g.fillRect(0,hor,W,H-hor);
+  if(night){g.fillStyle='rgba(255,210,140,.5)';for(let k=0;k<40;k++){g.fillRect((k*97)%W,hor-3-(k*13)%14,2,2)}}
+  // road strips, far to near
+  const half=75,strips=[];let acc=0;
+  for(let k=0;k<160;k++){const a=tr[(i0+k)%n],b=tr[(i0+k+1)%n];acc+=Math.hypot(b[0]-a[0],b[1]-a[1]);if(acc>4500)break;
+    const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;strips.push([[a[0]+nx*half,a[1]+ny*half],[a[0]-nx*half,a[1]-ny*half],k])}
+  for(let k=strips.length-2;k>=0;k--){const [l1,r1]=strips[k],[l2,r2]=strips[k+1],P1=proj(...l1,0),P2=proj(...r1,0),P3=proj(...r2,0),P4=proj(...l2,0);if(!P1||!P2||!P3||!P4)continue;
+    const fog=Math.min(1,P1[2]/4500);
+    g.fillStyle=night?`rgb(${78-fog*45},${80-fog*45},${88-fog*45})`:`rgb(${92+fog*80},${95+fog*80},${100+fog*85})`;g.beginPath();g.moveTo(P1[0],P1[1]);g.lineTo(P2[0],P2[1]);g.lineTo(P3[0],P3[1]);g.lineTo(P4[0],P4[1]);g.closePath();g.fill();
+    const edge=(A,B,cl)=>{g.strokeStyle=cl;g.lineWidth=Math.max(1,60/A[2]*6);g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(B[0],B[1]);g.stroke()};
+    const kerb=(strips[k][2]%2)?'#d0202a':'#f4f4f4';edge(P1,P4,kerb);edge(P2,P3,kerb);
+    if(strips[k][2]%3===0){g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=Math.max(.5,20/P1[2]*6);g.beginPath();g.moveTo((P1[0]+P2[0])/2,(P1[1]+P2[1])/2);g.lineTo((P3[0]+P4[0])/2,(P3[1]+P4[1])/2);g.stroke()}
+    if(night&&strips[k][2]%6===0){g.fillStyle='rgba(255,230,180,.85)';g.beginPath();g.arc(P1[0]-(P2[0]-P1[0])*.25,P1[1]-Math.max(4,1200/P1[2]),Math.max(1,300/P1[2]),0,7);g.fill()}}
+  // the car ahead
+  const pa=proj(wa.x,wa.y,0);if(pa)drawRearCar(g,pa[0],pa[1],Math.max(.15,Math.min(3.2,F/pa[2]*.22)),col(lead));
+  // helmet view: halo, cockpit and mirrors
+  g.fillStyle='#0b0b0d';g.beginPath();g.moveTo(0,H);g.lineTo(0,H*.78);g.quadraticCurveTo(W*.5,H*.62,W,H*.78);g.lineTo(W,H);g.closePath();g.fill();
+  g.fillStyle=col(chase);g.beginPath();g.moveTo(W*.2,H);g.quadraticCurveTo(W*.5,H*.74,W*.8,H);g.closePath();g.fill();
+  g.strokeStyle='#18181c';g.lineWidth=W*.022;g.beginPath();g.moveTo(W*.5,H*.86);g.lineTo(W*.5,H*.2);g.stroke();g.lineWidth=W*.02;g.beginPath();g.moveTo(W*.24,H*.9);g.quadraticCurveTo(W*.5,H*.04,W*.76,H*.9);g.stroke();
+  for(const sx of [.07,.79]){g.fillStyle='#16161a';g.fillRect(W*sx,H*.6,W*.14,H*.12);g.fillStyle=night?'#1a2033':'#7d93a8';g.fillRect(W*sx+3,H*.6+3,W*.14-6,H*.12-6)}
+  const x=telSamples(S.t-2000,S.t).pop();if(x&&String(TEL.dn)===String(dB)){g.fillStyle='rgba(0,0,0,.6)';g.fillRect(W/2-34,H-30,68,22);g.fillStyle='#fff';g.font='800 14px "Titillium Web",sans-serif';g.textAlign='center';g.fillText(x.s+' km/u',W/2,H-15);g.textAlign='left'}
 }
 
 /* ---------- compare two laps: speed trace, delta, faster driver per piece of track ---------- */
@@ -1565,7 +1624,7 @@ function drawMap(order){
   $('mapEmpty').style.display=view?'none':'grid';if(!view)return;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.lineJoin=ctx.lineCap='round';
   const W=cv.width/dpr,H=cv.height/dpr;ctx.lineJoin=ctx.lineCap='round';
-  const bt=battleTarget(W,H),tz=bt?2.4:1,tx=bt?bt.x:W/2,ty=bt?bt.y:H/2;CAM.label=bt?bt.label:'';
+  const bt=battleTarget(W,H);CAM.pair=bt?[bt.a,bt.b,bt.gap]:null;const tz=bt?2.4:1,tx=bt?bt.x:W/2,ty=bt?bt.y:H/2;CAM.label=bt?bt.label:'';
   if(!CAM.x){CAM.x=W/2;CAM.y=H/2}const ek=Math.min(1,frameDt/400);CAM.z+=(tz-CAM.z)*ek;CAM.x+=(tx-CAM.x)*ek;CAM.y+=(ty-CAM.y)*ek;
   const z=CAM.z,offX=W/2-CAM.x*z,offY=H/2-CAM.y*z,camOn=()=>ctx.setTransform(dpr*z,0,0,dpr*z,dpr*(offX+(z>1.01?0:CAM.x*z-W/2+W/2-CAM.x*z)),dpr*offY);
   const cam=z>1.01;
@@ -1693,6 +1752,7 @@ function loop(ts){
   acc+=dt;if(acc>300){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
   if(curView==='circle')drawCircle();
+  if(curView==='map'&&BATTLE)drawOnboard();else $('onb').classList.remove('on');
   if(curView==='map'&&(loop.c=(loop.c||0)+1)%3===0)drawCircle($('circ2'),true);
   if(curView==='map'){if((loop.f=(loop.f||0)+1)%2===0)drawDrops(dt*2);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
   requestAnimationFrame(loop);
