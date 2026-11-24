@@ -152,6 +152,18 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 .maptools{position:absolute;right:12px;top:12px;display:flex;gap:6px}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);text-align:center;padding:20px;pointer-events:none}
 #grid,#stand{position:absolute;inset:0;overflow:auto;padding:12px}
+#cmp,#tyre{position:absolute;inset:0;display:flex;flex-direction:column;padding:10px 12px;gap:8px;overflow:auto}
+.cmph{display:flex;flex-wrap:wrap;gap:8px;align-items:center}#cmpc{flex:1;min-height:420px;width:100%}#tyrec{flex:0 0 52%;min-height:300px;width:100%}
+.tsel{display:flex;flex-wrap:wrap;gap:4px}.tsel button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;color:var(--mute)}.tsel button.on{color:#fff}
+#tyreTab table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}#tyreTab td,#tyreTab th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}#tyreTab th{color:var(--mute);font-weight:600}
+#tel{position:absolute;right:12px;bottom:12px;z-index:6;width:300px;background:rgba(14,16,20,.94);border:1px solid #333846;border-radius:12px;padding:8px 10px;display:none;box-shadow:0 8px 24px #000a}
+#tel.on{display:block}#tel .th2{display:flex;align-items:center;gap:8px}#tel .th2 b{font-size:15px}#tel .th2 span{flex:1;font-size:12px}#telX{background:none;border:0;color:var(--mute);font-size:18px;cursor:pointer}
+#tel .tg{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;margin:6px 0}
+#tel .spd b,#tel .gear b{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}#tel small{display:block;color:var(--mute);font-size:10px}
+#tel .bars div{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--mute)}#tel .bars span{width:40px}#tel .bars i{flex:1;height:7px;background:#23262f;border-radius:4px;overflow:hidden}
+#tel .bars u{display:block;height:100%;width:0;background:#2fd16b}#tel .bars u.br{background:#ff3b30}#tel .bars u.rp{background:#2f8cff}
+.drs{font-size:11px;font-weight:900;padding:3px 6px;border-radius:4px;background:#23262f;color:#555}.drs.on{background:#2fd16b;color:#04220f}
+#telc{width:100%;height:70px;display:block}
 #circ{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}.circhelp{position:absolute;left:12px;bottom:10px;color:var(--mute);font-size:12px;pointer-events:none}
 .lt{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
 .lt th,.lt td{padding:3px 6px;border:1px solid #1f2129;text-align:right;white-space:nowrap}
@@ -234,6 +246,8 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
     <div class="tabs">
       <button class="tab on" data-v="map">Baan</button>
       <button class="tab" data-v="circle">Cirkel</button>
+      <button class="tab" data-v="cmp">Vergelijk</button>
+      <button class="tab" data-v="tyre">Banden</button>
       <button class="tab" data-v="grid">Rondetijden</button>
       <button class="tab" data-v="stand">WK-stand</button>
     </div>
@@ -242,8 +256,9 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
       <div id="mapwrap"><canvas id="map"></canvas></div>
       <div class="wx" id="wx"></div>
       <div class="toast" id="toast"></div>
+      <div id="tel"><div class="th2"><b id="telN">–</b><span id="telG" class="dim"></span><button id="telX" aria-label="Sluiten">×</button></div><div class="tg"><div class="spd"><b id="telS">–</b><small>km/u</small></div><div class="gear"><b id="telGear">–</b><small>versn.</small></div><div class="bars"><div><span>Gas</span><i><u id="telT"></u></i></div><div><span>Rem</span><i><u id="telB" class="br"></u></i></div><div><span>Toeren</span><i><u id="telR" class="rp"></u></i></div></div><div id="telD" class="drs">DRS</div></div><canvas id="telc"></canvas></div>
 
-      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
+      <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="battleb" title="Camera volgt het spannendste gevecht">Gevecht</button><button class="btn" id="secb" title="Mini-sectoren van de gekozen coureur op de baan">Sectoren</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
       <div class="empty" id="mapEmpty">Baan verschijnt zodra de sessie is geladen</div>
      </div>
      <div id="side">
@@ -254,6 +269,8 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
      </div>
     </div>
     <div class="view" id="v-circle"><canvas id="circ"></canvas><div class="circhelp">Klik op een coureur: pitvenster en gat tot de auto ervoor. Eén rondje = één ronde in tijd.</div></div>
+    <div class="view" id="v-cmp"><div id="cmp"><div class="cmph"><select id="cmpA" aria-label="Coureur A"></select><span>tegen</span><select id="cmpB" aria-label="Coureur B"></select><span id="cmpInfo" class="dim"></span></div><canvas id="cmpc"></canvas></div></div>
+    <div class="view" id="v-tyre"><div id="tyre"><div id="tyreSel" class="tsel"></div><canvas id="tyrec"></canvas><div id="tyreTab"></div></div></div>
     <div class="view" id="v-grid"><div id="grid"></div></div>
     <div class="view" id="v-stand"><div id="stand"><p class="dim">WK-stand laden…</p></div></div>
   </div>
@@ -349,7 +366,7 @@ function reset(){
 }
 function setDrivers(arr){for(const d of arr)S.drivers[d.driver_number]=d}
 function setLaps(arr){
-  const by={};S.lapsRaw={};
+  const by={};S.lapsRaw={};S.lapRaw={};for(const l of arr)(S.lapRaw[l.driver_number]=S.lapRaw[l.driver_number]||[]).push(l);
   for(const l of arr){const n=(l.segments_sector_1||[]).length+(l.segments_sector_2||[]).length+(l.segments_sector_3||[]).length;if(n>(S.lapsRaw.n||0))S.lapsRaw.n=n}
   for(const l of arr){(by[l.driver_number]=by[l.driver_number]||[]).push(l)}
   for(const dn in by){
@@ -382,7 +399,7 @@ async function buildTrack(){
   if(tr.length>50){S.track=tr;trackCum();geoAlign();fit();maybeAlign()}
 }
 async function loadSession(s){
-  reset();lastRain=null;WS.free=false;HIST.key='';HIST.grid=null;HIST.last=-1;RA.pause();raKey=null;raSig='';raLastT=0;S.mode='replay';S.sess=s;setLive(false);
+  reset();lastRain=null;WS.free=false;CMP.key='';CMP.picked=false;CMP.data=null;TY_SEL.clear();TEL.dn=null;HIST.key='';HIST.grid=null;HIST.last=-1;RA.pause();raKey=null;raSig='';raLastT=0;S.mode='replay';S.sess=s;setLive(false);
   S.t0=T(s.date_start);S.t1=T(s.date_end);S.t=S.t0;
   const sk=s.session_key,g=S.gen,problems=[];
   const part=async(label,fn)=>{if(g!==S.gen)return;status(label+'…');try{await fn()}catch(e){problems.push(label.toLowerCase()+' ('+e.message+')')}if(g===S.gen)renderAll(true)};
@@ -1201,6 +1218,155 @@ $('rlist').onclick=e=>{if(ONLY)return;const m=e.target.closest('.rmsg');if(!m)re
 function placeRadio(){}
 new ResizeObserver(()=>{fit();rmap&&rmap.invalidateSize()}).observe(document.getElementById('side'));
 
+/* ---------- top-down F1 car (front = +x) ---------- */
+function drawF1Car(g,c,k,sel){
+  g.save();g.scale(k,k);
+  g.fillStyle='rgba(0,0,0,.45)';g.beginPath();g.ellipse(.8,1.4,8.6,4.6,0,0,7);g.fill();
+  const tyre='#111';g.fillStyle=tyre;g.fillRect(3.6,-4.7,2.8,1.9);g.fillRect(3.6,2.8,2.8,1.9);g.fillRect(-6.2,-5,3.2,2.3);g.fillRect(-6.2,2.7,3.2,2.3);
+  g.fillStyle=c;
+  g.fillRect(7,-4.3,1.6,8.6);                                   // front wing
+  g.beginPath();g.moveTo(8,-.7);g.lineTo(8,.7);g.lineTo(2.4,1.5);g.lineTo(2.4,-1.5);g.closePath();g.fill(); // nose
+  g.beginPath();g.moveTo(2.6,-1.7);g.lineTo(1,-3.2);g.lineTo(-3.6,-3);g.lineTo(-5.4,-1.4);g.lineTo(-5.4,1.4);g.lineTo(-3.6,3);g.lineTo(1,3.2);g.lineTo(2.6,1.7);g.closePath();g.fill(); // body + sidepods
+  g.fillRect(-8,-3.6,1.7,7.2);                                  // rear wing
+  g.fillStyle='rgba(0,0,0,.75)';g.beginPath();g.ellipse(.6,0,1.5,.95,0,0,7);g.fill(); // cockpit / halo
+  g.fillStyle='rgba(255,255,255,.55)';g.fillRect(-7.7,-3.4,.6,6.8);g.fillRect(7.6,-4.1,.5,8.2);
+  if(sel){g.strokeStyle='#fff';g.lineWidth=1;g.beginPath();g.moveTo(8.6,-4.3);g.lineTo(8.6,4.3);g.moveTo(-8,-3.6);g.lineTo(-8,3.6);g.stroke()}
+  g.restore();
+}
+
+/* ---------- telemetry of the selected driver (OpenF1 car_data) ---------- */
+const TEL={dn:null,ch:new Map(),pend:new Set(),at:new Map()};
+function telNeed(){
+  const dn=S.sel;if(!dn||!S.sess){$('tel').classList.remove('on');return}
+  if(TEL.dn!==dn){TEL.dn=dn;TEL.ch.clear();TEL.pend.clear()}
+  const k=Math.floor((S.t-S.t0)/CH),g=S.gen;
+  for(const i of [k,k+1]){const a=S.t0+i*CH,stale=S.mode==='live'&&Date.now()-(TEL.at.get(i)||0)>3000&&a+CH>Date.now()-5000;
+    if((TEL.ch.has(i)&&!stale)||TEL.pend.has(i)||a>Date.now())continue;TEL.pend.add(i);
+    api('car_data',`session_key=${S.sess.session_key}&driver_number=${dn}&date>=${iso(a)}&date<${iso(a+CH)}`).then(arr=>{if(g!==S.gen||TEL.dn!==dn)return;
+      TEL.ch.set(i,arr.map(r=>({t:T(r.date),s:r.speed,th:r.throttle,b:r.brake,g:r.n_gear,r:r.rpm,d:r.drs})).sort((x,y)=>x.t-y.t));TEL.at.set(i,Date.now());TEL.pend.delete(i)}).catch(()=>TEL.pend.delete(i))}
+  for(const key of TEL.ch.keys())if(key<k-1||key>k+2)TEL.ch.delete(key);
+}
+function telSamples(t0,t1){const out=[];for(const [,a] of TEL.ch)for(const x of a)if(x.t>=t0&&x.t<=t1)out.push(x);return out.sort((a,b)=>a.t-b.t)}
+function renderTel(){
+  const el=$('tel');if(!S.sel||curView!=='map'){el.classList.remove('on');return}
+  const d=S.drivers[S.sel]||{},row=(lastRows||[]).find(r=>String(r.dn)===String(S.sel));el.classList.add('on');
+  $('telN').textContent=(row&&row.p?'P'+row.p+' ':'')+(d.name_acronym||S.sel);$('telN').style.color='#'+(d.team_colour||'fff');$('telG').textContent=d.team_name||'';
+  const xs=telSamples(S.t-20000,S.t),x=xs[xs.length-1];
+  $('telS').textContent=x?x.s:'–';$('telGear').textContent=x?(x.g||'N'):'–';
+  $('telT').style.width=(x?x.th:0)+'%';$('telB').style.width=(x?(x.b>1?100:x.b):0)+'%';$('telR').style.width=(x?Math.min(100,x.r/130):0)+'%';
+  $('telD').classList.toggle('on',!!(x&&x.d>=10));
+  const c=$('telc'),dpr=devicePixelRatio||1,W=c.clientWidth,H=c.clientHeight;if(c.width!==W*dpr){c.width=W*dpr;c.height=H*dpr}const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  if(!xs.length){g.fillStyle='#8a8f9c';g.font='12px "Titillium Web",sans-serif';g.fillText('Telemetrie laden…',6,H/2);return}
+  const X=t=>(t-(S.t-20000))/20000*W;
+  const line=(f,col,max)=>{g.beginPath();xs.forEach((p,i)=>{const y=H-2-(f(p)/max)*(H-6);i?g.lineTo(X(p.t),y):g.moveTo(X(p.t),y)});g.strokeStyle=col;g.lineWidth=1.6;g.stroke()};
+  line(p=>p.th,'rgba(47,209,107,.7)',100);line(p=>p.b>1?100:p.b,'rgba(255,59,48,.8)',100);line(p=>p.s,'#fff',360);
+}
+$('telX').onclick=()=>{S.sel=null;renderAll()};
+
+/* ---------- mini-sectors of the selected driver (or the leader) ---------- */
+let SECON=false;try{SECON=localStorage.getItem('f1sec')==='1'}catch(e){}
+const SEGC={2048:'#ffd400',2049:'#2fd16b',2051:'#b45cff',2064:'#2f8cff'};
+function drawMiniSectors(){
+  if(!SECON||CUM.length<2)return;const dn=S.sel||(lastRows&&lastRows[0]&&lastRows[0].dn);if(!dn)return;
+  const raw=(S.lapRaw||{})[dn]||[];let lap=null;for(const l of raw){const e=T(l.date_start)+(l.lap_duration||0)*1000;if(l.lap_duration&&e<=S.t&&(!lap||l.lap_number>lap.lap_number))lap=l}
+  if(!lap)return;const seg=[...(lap.segments_sector_1||[]),...(lap.segments_sector_2||[]),...(lap.segments_sector_3||[])];if(!seg.length)return;
+  seg.forEach((v,i)=>{const c=SEGC[v];if(c)portion(i/seg.length,(i+1)/seg.length,c,4.5)});
+}
+$('secb').classList.toggle('on',SECON);$('secb').onclick=()=>{SECON=!SECON;try{localStorage.setItem('f1sec',SECON?'1':'0')}catch(e){}$('secb').classList.toggle('on',SECON)};
+
+/* ---------- battle camera: zooms in on the closest fight near the front ---------- */
+let BATTLE=false;const CAM={z:1,x:0,y:0,label:''};
+$('battleb').onclick=()=>{BATTLE=!BATTLE;$('battleb').classList.toggle('on',BATTLE)};
+function battleTarget(W,H){
+  if(!BATTLE||!lastRows||!isRace())return null;let best=null;
+  lastRows.forEach((r,i)=>{if(i===0)return;const v=r.iv&&r.iv.int;if(typeof v!=='number'||v>1.2)return;const a=lastRows[i-1],wa=where(a.dn,S.t),wb=where(r.dn,S.t);if(!wa||!wb)return;
+    const sc=v+i*.08;if(!best||sc<best.sc){const pa=P(wa.x,wa.y),pb=P(wb.x,wb.y);best={sc,x:(pa[0]+pb[0])/2,y:(pa[1]+pb[1])/2,label:`P${a.p||i} ${a.d.name_acronym}  ⟷  P${r.p||i+1} ${r.d.name_acronym}   ${v.toFixed(1)} s`}}});
+  return best;
+}
+
+/* ---------- compare two laps: speed trace, delta, faster driver per piece of track ---------- */
+const CMP={key:'',data:null,busy:false};
+function fillCmpSelects(){
+  const opts=Object.values(S.drivers).sort((a,b)=>a.driver_number-b.driver_number).map(d=>`<option value="${d.driver_number}">${d.name_acronym} · ${d.team_name||''}</option>`).join('');
+  for(const id of ['cmpA','cmpB'])if($(id).dataset.k!==String(S.sess.session_key)){$(id).innerHTML=opts;$(id).dataset.k=String(S.sess.session_key)}
+  const best=Object.keys(S.laps).map(dn=>({dn,b:Math.min(...S.laps[dn].filter(l=>l.d&&!l.pit).map(l=>l.d))})).filter(x=>isFinite(x.b)).sort((a,b)=>a.b-b.b);
+  if(!CMP.picked&&best.length>1){$('cmpA').value=best[0].dn;$('cmpB').value=best[1].dn;CMP.picked=true}
+}
+async function cmpLoad(){
+  if(!S.sess||CMP.busy)return;fillCmpSelects();const A=$('cmpA').value,B=$('cmpB').value,key=S.sess.session_key+':'+A+':'+B;if(CMP.key===key)return drawCmp();
+  CMP.busy=true;CMP.key=key;CMP.data=null;$('cmpInfo').textContent='Snelste ronden laden…';drawCmp();
+  try{
+    const one=async dn=>{const l=(S.laps[dn]||[]).filter(l=>l.d&&!l.pit&&l.e<=Math.max(S.t,S.t1)).sort((a,b)=>a.d-b.d)[0];if(!l)throw new Error('geen ronde voor '+dn);
+      const qs=`session_key=${S.sess.session_key}&driver_number=${dn}&date>=${iso(l.s-500)}&date<${iso(l.e+500)}`;
+      const [cd,lo]=await Promise.all([api('car_data',qs),api('location',qs)]);
+      const L=lo.filter(p=>p.x||p.y).map(p=>({t:T(p.date),x:p.x,y:p.y})).sort((a,b)=>a.t-b.t);let dist=0;L.forEach((p,i)=>{if(i)dist+=Math.hypot(p.x-L[i-1].x,p.y-L[i-1].y)/10;p.d=dist});
+      const dAt=t=>{const i=lastLE(L,t);if(i<0)return 0;const p=L[i],q=L[i+1];return q?p.d+(q.d-p.d)*(t-p.t)/((q.t-p.t)||1):p.d};
+      const C=cd.map(r=>({t:T(r.date),s:r.speed,th:r.throttle,b:r.brake,g:r.n_gear})).filter(r=>r.t>=l.s&&r.t<=l.e).sort((a,b)=>a.t-b.t).map(r=>({...r,dd:dAt(r.t),tt:(r.t-l.s)/1000}));
+      return {dn,lap:l,C,len:dist}};
+    const [a,b]=await Promise.all([one(A),one(B)]);CMP.data={a,b};$('cmpInfo').textContent='';
+  }catch(e){$('cmpInfo').textContent='Vergelijken lukte niet: '+e.message;CMP.key=''}
+  CMP.busy=false;drawCmp();
+}
+function drawCmp(){
+  const c=$('cmpc'),dpr=devicePixelRatio||1,W=c.clientWidth,H=c.clientHeight;if(!W||!H)return;if(c.width!==W*dpr){c.width=W*dpr;c.height=H*dpr}
+  const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);const D=CMP.data;
+  g.font='600 12px "Titillium Web",sans-serif';g.fillStyle='#8a8f9c';if(!D){g.fillText(CMP.busy?'Laden…':'Kies twee coureurs',10,20);return}
+  const ca='#'+(S.drivers[D.a.dn].team_colour||'fff'),cbc0='#'+(S.drivers[D.b.dn].team_colour||'aaa'),cb=ca.toLowerCase()===cbc0.toLowerCase()?'#ffffff':cbc0;
+  const len=Math.min(D.a.len,D.b.len)||1,step=10,N=Math.floor(len/step);
+  const sample=(C,d,f)=>{let i=0;while(i<C.length-1&&C[i+1].dd<d)i++;const p=C[i],q=C[i+1]||p,k=(d-p.dd)/((q.dd-p.dd)||1);return f(p)+(f(q)-f(p))*Math.max(0,Math.min(1,k))};
+  const sa=[],sb=[],dl=[];for(let i=0;i<=N;i++){const d=i*step;sa.push(sample(D.a.C,d,p=>p.s));sb.push(sample(D.b.C,d,p=>p.s));dl.push(sample(D.b.C,d,p=>p.tt)-sample(D.a.C,d,p=>p.tt))}
+  // layout: map left, charts right (stacked on narrow screens)
+  const narrow=W<760,mw=narrow?W:Math.min(W*.36,380),mh=narrow?Math.min(300,H*.4):H,cx0=narrow?0:mw+16,cy0=narrow?mh+10:0,cw=W-cx0,ch=H-cy0;
+  // track map coloured by who is faster per 50 m
+  {const pts=[];const L=D.a.C;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;const lo=S.track;for(const [x,y] of lo){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
+   const sc=Math.min((mw-30)/(x1-x0||1),(mh-60)/(y1-y0||1)),ox=(mw-(x1-x0)*sc)/2,oy=40+(mh-60-(y1-y0)*sc)/2,M=(x,y)=>[ox+(x-x0)*sc,oy+(y1-y)*sc];
+   const tl=S.track.length;g.lineCap='round';g.lineWidth=7;
+   for(let i=0;i<tl;i++){const f=i/tl,k=Math.min(N,Math.floor(f*N)),k2=Math.min(N,k+5),gain=(dl[k2]-dl[Math.max(0,k-5)]);const a=M(...S.track[i]),b=M(...S.track[(i+1)%tl]);
+     g.strokeStyle=Math.abs(gain)<.005?'#555':gain>0?ca:cb;g.beginPath();g.moveTo(...a);g.lineTo(...b);g.stroke()}
+   g.fillStyle='#fff';g.font='700 14px "Titillium Web",sans-serif';g.fillText('Wie is waar sneller',narrow?8:0,18);
+   g.font='600 12px "Titillium Web",sans-serif';g.fillStyle=ca;g.fillText(`■ ${S.drivers[D.a.dn].name_acronym} ${fmtLap(D.a.lap.d)}`,narrow?8:0,mh-8);g.fillStyle=cb;g.fillText(`■ ${S.drivers[D.b.dn].name_acronym} ${fmtLap(D.b.lap.d)}`,(narrow?8:0)+130,mh-8)}
+  // speed chart
+  const h1=ch*.62,h2=ch-h1-26,X=i=>cx0+40+i/N*(cw-50);
+  g.strokeStyle='#23262f';g.lineWidth=1;g.fillStyle='#8a8f9c';g.font='11px "Titillium Web",sans-serif';
+  for(let v=100;v<=350;v+=50){const y=cy0+h1-(v/360)*(h1-20);g.beginPath();g.moveTo(cx0+40,y);g.lineTo(cx0+cw-10,y);g.stroke();g.fillText(v,cx0+8,y+4)}
+  const plot=(arr,col,y0,hh,mn,mx)=>{g.beginPath();arr.forEach((v,i)=>{const y=y0+hh-((v-mn)/(mx-mn))*hh;i?g.lineTo(X(i),y):g.moveTo(X(i),y)});g.strokeStyle=col;g.lineWidth=1.8;g.stroke()};
+  plot(sa,ca,cy0+20,h1-20,0,360);plot(sb,cb,cy0+20,h1-20,0,360);
+  g.fillStyle='#fff';g.font='700 13px "Titillium Web",sans-serif';g.fillText('Snelheid (km/u) over de ronde',cx0+40,cy0+14);
+  // delta chart
+  const ext=Math.max(.2,...dl.map(Math.abs)),y0=cy0+h1+26;g.strokeStyle='#3a3e4a';g.beginPath();g.moveTo(cx0+40,y0+h2/2);g.lineTo(cx0+cw-10,y0+h2/2);g.stroke();
+  plot(dl,'#ffd400',y0,h2,-ext,ext);g.fillStyle='#fff';g.fillText(`Verschil: ${S.drivers[D.b.dn].name_acronym} t.o.v. ${S.drivers[D.a.dn].name_acronym} (boven = ${S.drivers[D.a.dn].name_acronym} sneller)`,cx0+40,y0-6);
+  g.fillStyle='#8a8f9c';g.font='11px "Titillium Web",sans-serif';g.fillText('+'+ext.toFixed(2)+'s',cx0+2,y0+10);g.fillText('−'+ext.toFixed(2)+'s',cx0+2,y0+h2);g.fillText('0 m',cx0+40,cy0+ch-2);g.fillText(Math.round(len)+' m',cx0+cw-50,cy0+ch-2);
+}
+$('cmpA').onchange=$('cmpB').onchange=()=>cmpLoad();
+
+/* ---------- tyres: lap times per stint and degradation ---------- */
+const TY_SEL=new Set();
+function drawTyres(){
+  if(!S.sess)return;const rows=lastRows||[];
+  if(!TY_SEL.size)rows.slice(0,5).forEach(r=>TY_SEL.add(String(r.dn)));
+  const sel=$('tyreSel'),sig=rows.map(r=>r.dn).join()+'|'+[...TY_SEL].join();
+  if(sel.dataset.s!==sig){sel.dataset.s=sig;sel.innerHTML=rows.map(r=>`<button data-dn="${r.dn}" class="${TY_SEL.has(String(r.dn))?'on':''}" style="${TY_SEL.has(String(r.dn))?`background:${col(r.d)};border-color:${col(r.d)}`:''}">${r.d.name_acronym||r.dn}</button>`).join('')}
+  const c=$('tyrec'),dpr=devicePixelRatio||1,W=c.clientWidth,H=c.clientHeight;if(!W||!H)return;if(c.width!==W*dpr){c.width=W*dpr;c.height=H*dpr}const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  const all=[];for(const dn of TY_SEL)for(const l of S.laps[dn]||[])if(l.d&&l.e<=S.t&&!l.pit&&l.n>1)all.push(l.d);
+  if(!all.length){g.fillStyle='#8a8f9c';g.font='12px "Titillium Web",sans-serif';g.fillText('Nog geen ronden',10,20);$('tyreTab').innerHTML='';return}
+  all.sort((a,b)=>a-b);const med=all[Math.floor(all.length/2)],mn=all[0]-.3,mx=Math.min(med*1.07,all[all.length-1])+.3;let maxLap=1;for(const dn of TY_SEL)for(const l of S.laps[dn]||[])if(l.e<=S.t)maxLap=Math.max(maxLap,l.n);
+  const X=n=>48+(n-1)/Math.max(1,maxLap-1)*(W-60),Y=v=>12+(mx-v)/(mx-mn)*(H-36);
+  g.strokeStyle='#23262f';g.fillStyle='#8a8f9c';g.font='11px "Titillium Web",sans-serif';
+  for(let v=Math.ceil(mn);v<=mx;v+=Math.max(.5,Math.round((mx-mn)/6*2)/2)){g.beginPath();g.moveTo(48,Y(v));g.lineTo(W-8,Y(v));g.stroke();g.fillText(fmtLap(v).replace(/(\.\d)\d+$/,'$1'),2,Y(v)+4)}
+  for(let n=1;n<=maxLap;n+=Math.max(1,Math.round(maxLap/12)))g.fillText(n,X(n)-4,H-6);
+  const rowsT=[];
+  for(const dn of TY_SEL){const d=S.drivers[dn]||{},ls=(S.laps[dn]||[]).filter(l=>l.d&&l.e<=S.t&&!l.pit&&l.n>1&&l.d<=mx),stints=S.stints[dn]||[];
+    g.strokeStyle=col(d);g.lineWidth=1.6;g.beginPath();let prevSt=null;
+    ls.forEach(l=>{const st=stints.find(s=>s.lap_start<=l.n&&(s.lap_end==null||s.lap_end>=l.n));if(st!==prevSt){g.stroke();g.beginPath();g.moveTo(X(l.n),Y(l.d));prevSt=st}else g.lineTo(X(l.n),Y(l.d))});g.stroke();
+    ls.forEach(l=>{const st=stints.find(s=>s.lap_start<=l.n&&(s.lap_end==null||s.lap_end>=l.n)),ty=st&&TY[st.compound];g.beginPath();g.arc(X(l.n),Y(l.d),3,0,7);g.fillStyle=ty?ty[1]:'#888';g.fill()});
+    for(const st of stints){const sl=ls.filter(l=>l.n>=st.lap_start&&(st.lap_end==null||l.n<=st.lap_end));if(sl.length<2)continue;
+      const n=sl.length,mxn=sl.reduce((a,l)=>a+l.n,0)/n,my=sl.reduce((a,l)=>a+l.d,0)/n,slope=sl.reduce((a,l)=>a+(l.n-mxn)*(l.d-my),0)/(sl.reduce((a,l)=>a+(l.n-mxn)**2,0)||1);
+      rowsT.push(`<tr><td><span class="drv"><i style="background:${col(d)}"></i>${d.name_acronym}</span></td><td>${st.compound?`<span class="tyre" style="border-color:${(TY[st.compound]||[])[1]};color:${(TY[st.compound]||[])[1]}">${(TY[st.compound]||['?'])[0]}</span>`:'?'}</td><td>${st.lap_start}–${st.lap_end??'…'}</td><td>${fmtLap(my)}</td><td style="color:${slope>.08?'#ff6b6b':slope>.03?'#ffd400':'#2fd16b'}">${slope>=0?'+':''}${slope.toFixed(3)} s/ronde</td></tr>`)}}
+  g.fillStyle='#fff';g.font='700 13px "Titillium Web",sans-serif';g.fillText('Rondetijden per stint (puntkleur = band)',52,12);
+  $('tyreTab').innerHTML=`<table><tr><th>Coureur</th><th>Band</th><th>Ronden</th><th>Gem. tijd</th><th>Slijtage</th></tr>${rowsT.join('')}</table><p class="dim" style="font-size:12px">Slijtage = hoeveel trager elke ronde gemiddeld wordt binnen een stint (zonder in/uit-ronden). Ook brandstof en verkeer tellen mee.</p>`;
+}
+$('tyreSel').onclick=e=>{const b=e.target.closest('[data-dn]');if(!b)return;const dn=b.dataset.dn;TY_SEL.has(dn)?TY_SEL.delete(dn):TY_SEL.add(dn);drawTyres()};
+
 /* ---------- circle of gaps: every car placed by its time gap to the leader ---------- */
 const CC=$('circ'),cx2=CC.getContext('2d');let CHIT=[];
 function lapRef(){let L=[];for(const dn in S.laps)for(const l of S.laps[dn])if(l.d&&l.e&&l.e<=S.t&&!l.pit&&l.d<300)L.push([l.e,l.d]);L.sort((a,b)=>b[0]-a[0]);L=L.slice(0,40).map(x=>x[1]).sort((a,b)=>a-b);return L.length?L[Math.floor(L.length*.3)]:90}
@@ -1399,7 +1565,16 @@ function drawMap(order){
   $('mapEmpty').style.display=view?'none':'grid';if(!view)return;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.lineJoin=ctx.lineCap='round';
   const W=cv.width/dpr,H=cv.height/dpr;ctx.lineJoin=ctx.lineCap='round';
-  if(TL){ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(TL,0,0);ctx.setTransform(dpr,0,0,dpr,0,0)}
+  const bt=battleTarget(W,H),tz=bt?2.4:1,tx=bt?bt.x:W/2,ty=bt?bt.y:H/2;CAM.label=bt?bt.label:'';
+  if(!CAM.x){CAM.x=W/2;CAM.y=H/2}const ek=Math.min(1,frameDt/400);CAM.z+=(tz-CAM.z)*ek;CAM.x+=(tx-CAM.x)*ek;CAM.y+=(ty-CAM.y)*ek;
+  const z=CAM.z,offX=W/2-CAM.x*z,offY=H/2-CAM.y*z,camOn=()=>ctx.setTransform(dpr*z,0,0,dpr*z,dpr*(offX+(z>1.01?0:CAM.x*z-W/2+W/2-CAM.x*z)),dpr*offY);
+  const cam=z>1.01;
+  if(TL){ctx.setTransform(cam?z:1,0,0,cam?z:1,cam?dpr*offX:0,cam?dpr*offY:0);ctx.drawImage(TL,0,0)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const baseView=view;
+  if(cam){const sp=view.sp.map(([x,y])=>[x*z+offX,y*z+offY]),occ=new Set();for(const [x,y] of sp)occ.add(Math.floor(x/8)+','+Math.floor(y/8));
+    view={...view,sc:view.sc*z,ox:view.ox*z+offX,oy:view.oy*z+offY,sp,occ}}
+  drawMiniSectors();
   const fst=drawFlags(W);
   drawRain(W,H,frameDt);
   drawBorder(W,H,fst);
@@ -1415,10 +1590,7 @@ function drawMap(order){
     if(r.best!=null&&r.best===fbest){ // purple neon for the fastest lap
       const pu=.65+.35*Math.sin(performance.now()/220);ctx.save();ctx.shadowColor=`rgba(190,90,255,${pu})`;ctx.shadowBlur=18;ctx.strokeStyle=`rgba(205,130,255,${.6+.4*pu})`;ctx.lineWidth=2.6;
       for(let k=0;k<2;k++){ctx.beginPath();ctx.roundRect?ctx.roundRect(-Lc-4,-Wc-4,(Lc+4)*2,(Wc+4)*2,Wc+4):ctx.rect(-Lc-4,-Wc-4,(Lc+4)*2,(Wc+4)*2);ctx.stroke()}ctx.restore()}
-    ctx.fillStyle='rgba(0,0,0,.45)';ctx.beginPath();ctx.ellipse(1.5,2,Lc+1,Wc+1,0,0,7);ctx.fill();
-    ctx.beginPath();ctx.roundRect?ctx.roundRect(-Lc,-Wc,Lc*2,Wc*2,Wc):ctx.rect(-Lc,-Wc,Lc*2,Wc*2);ctx.fillStyle=col(r.d);ctx.fill();
-    ctx.lineWidth=sel?2.5:1.2;ctx.strokeStyle=sel?'#fff':'rgba(0,0,0,.8)';ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(Lc-3,-Wc+1,2,Wc*2-2);
+    drawF1Car(ctx,col(r.d),sel?1.35:1,sel);
     ctx.restore();
   }
   const lab=[...order].filter(r=>r._uv&&where(r.dn,S.t));
@@ -1454,6 +1626,9 @@ function drawMap(order){
       ctx.fillStyle=l.s?'#ffd400':'#fff';ctx.fillText(l.t,B[0]+(l.c?11:4),y+.5)});
   }
   for(const r of order)delete r._uv;
+  view=baseView;ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(BATTLE){const t=CAM.label||'Geen gevecht binnen 1,2 s';ctx.font='800 15px "Titillium Web",sans-serif';const tw=ctx.measureText(t).width+28,bx=(view&&view.cx||W/2)-tw/2,by=(TB||60)+6;
+    ctx.fillStyle='rgba(225,6,0,.92)';ctx.beginPath();ctx.roundRect?ctx.roundRect(bx,by,tw,32,8):ctx.rect(bx,by,tw,32);ctx.fill();ctx.fillStyle='#fff';ctx.textAlign='left';ctx.fillText(t,bx+14,by+17);}
 }
 let lastRows=0,lastGridLap=-1,lastGridAt=0;
 function renderTower(){
@@ -1500,6 +1675,8 @@ let curView='map';
 function renderAll(force){
   if(!S.sess)return;
   const {rows,overall}=renderTower();renderHeader(rows);renderWx();renderRadio();placeRadio();try{syncWeather()}catch(e){}
+  lastRows=rows;try{telNeed();renderTel()}catch(e){}
+  if(curView==='tyre')drawTyres();if(curView==='cmp')cmpLoad();
   if(curView==='grid')renderGrid(rows,overall);
   lastRows=rows;
 }
