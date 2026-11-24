@@ -149,6 +149,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 .maptools{position:absolute;right:12px;top:12px;display:flex;gap:6px}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);text-align:center;padding:20px;pointer-events:none}
 #grid,#stand{position:absolute;inset:0;overflow:auto;padding:12px}
+#circ{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}.circhelp{position:absolute;left:12px;bottom:10px;color:var(--mute);font-size:12px;pointer-events:none}
 .lt{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
 .lt th,.lt td{padding:3px 6px;border:1px solid #1f2129;text-align:right;white-space:nowrap}
 .lt th{position:sticky;top:0;background:var(--panel);color:var(--mute);z-index:1}
@@ -229,6 +230,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
   <div class="right">
     <div class="tabs">
       <button class="tab on" data-v="map">Baan</button>
+      <button class="tab" data-v="circle">Cirkel</button>
       <button class="tab" data-v="grid">Rondetijden</button>
       <button class="tab" data-v="stand">WK-stand</button>
     </div>
@@ -247,6 +249,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 
      </div>
     </div>
+    <div class="view" id="v-circle"><canvas id="circ"></canvas><div class="circhelp">Klik op een coureur: pitvenster en gat tot de auto ervoor. Eén rondje = één ronde in tijd.</div></div>
     <div class="view" id="v-grid"><div id="grid"></div></div>
     <div class="view" id="v-stand"><div id="stand"><p class="dim">WK-stand laden…</p></div></div>
   </div>
@@ -1194,6 +1197,58 @@ $('rlist').onclick=e=>{if(ONLY)return;const m=e.target.closest('.rmsg');if(!m)re
 function placeRadio(){}
 new ResizeObserver(()=>{fit();rmap&&rmap.invalidateSize()}).observe(document.getElementById('side'));
 
+/* ---------- circle of gaps: every car placed by its time gap to the leader ---------- */
+const CC=$('circ'),cx2=CC.getContext('2d');let CHIT=[];
+function lapRef(){let L=[];for(const dn in S.laps)for(const l of S.laps[dn])if(l.d&&l.e&&l.e<=S.t&&!l.pit&&l.d<300)L.push([l.e,l.d]);L.sort((a,b)=>b[0]-a[0]);L=L.slice(0,40).map(x=>x[1]).sort((a,b)=>a-b);return L.length?L[Math.floor(L.length*.3)]:90}
+function trackFrac(dn){const w=where(dn,S.t);if(!w||!view||!view.sp)return null;const p=P(w.x,w.y);let bi=0,bd=1e12;const sp=view.sp;for(let k=0;k<sp.length;k+=2){const d=(sp[k][0]-p[0])**2+(sp[k][1]-p[1])**2;if(d<bd){bd=d;bi=k}}return bi/sp.length}
+function drawCircle(){
+  const dpr=devicePixelRatio||1,W=CC.clientWidth,H=CC.clientHeight;if(!W||!H)return;if(CC.width!==W*dpr){CC.width=W*dpr;CC.height=H*dpr}
+  const g=cx2;g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);if(!S.sess||!lastRows)return;
+  const R=Math.max(80,Math.min(W,H)/2-105),X=W/2,Y=H/2+6,ref=lapRef(),st=flagState(S.t),rows=lastRows;
+  const ang=sec=>-Math.PI/2+sec/ref*Math.PI*2,pt=(a,r)=>[X+Math.cos(a)*r,Y+Math.sin(a)*r];
+  // gaps
+  const lead=rows[0],lf=lead?trackFrac(lead.dn):null,cars=[];
+  for(const r of rows){let gsec=null;const v=r.iv&&r.iv.gap;
+    if(r===lead)gsec=0;else if(typeof v==='number')gsec=v;
+    else if(lf!=null){const f=trackFrac(r.dn);if(f!=null)gsec=(((lf-f)%1)+1)%1*ref}
+    if(gsec==null)continue;cars.push({r,g:gsec,a:ang(gsec%ref),lapped:gsec>=ref||typeof v==='string'})}
+  // ring and clock ticks
+  g.lineWidth=2;g.strokeStyle='#3a3e4a';g.beginPath();g.arc(X,Y,R,0,7);g.stroke();
+  g.fillStyle='#8a8f9c';g.font='600 12px "Titillium Web",sans-serif';g.textAlign='center';g.textBaseline='middle';
+  for(let sec=0;sec<ref;sec+=5){const a=ang(sec),big=sec%10===0,[x1,y1]=pt(a,R-(big?12:6)),[x2,y2]=pt(a,R);g.strokeStyle=big?'#8a8f9c':'#4a4f5c';g.lineWidth=big?2:1;g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();
+    if(big&&sec){const [tx,ty]=pt(a,R-28);g.fillText(sec,tx,ty)}}
+  // pit window for the selected car (or the leader)
+  const sel=cars.find(c=>String(c.r.dn)===String(S.sel))||cars[0];
+  if(sel){const base=21,loss=st.sc==='SC'||st.sc==='SCIN'?base*.55:st.sc==='VSC'?base*.7:base;
+    g.lineCap='butt';g.lineWidth=22;g.strokeStyle='rgba(150,70,220,.45)';g.beginPath();g.arc(X,Y,R,ang(sel.g),ang(sel.g+loss));g.stroke();
+    for(const [k,c,t] of [[base*.55,'#ffa31a','SC'],[base*.7,'#ffd400','VSC'],[base,'#b46cff','pit']]){const a=ang(sel.g+k),[x1,y1]=pt(a,R-14),[x2,y2]=pt(a,R+14);g.strokeStyle=c;g.lineWidth=3;g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();const [tx,ty]=pt(a,R-34);g.fillStyle=c;g.font='700 10px "Titillium Web",sans-serif';g.fillText(t,tx,ty)}
+    // gap to the car ahead
+    const ahead=cars.filter(c=>c.g<sel.g).sort((a,b)=>b.g-a.g)[0];
+    if(ahead){const d=sel.g-ahead.g;g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.arc(X,Y,R+20,ang(ahead.g),ang(sel.g));g.stroke();
+      const [tx,ty]=pt(ang((sel.g+ahead.g)/2),R+40);const txt=d.toFixed(1)+' s';g.font='700 14px "Titillium Web",sans-serif';const tw=g.measureText(txt).width+14;g.fillStyle='#111';g.strokeStyle='#fff';g.lineWidth=1.5;g.beginPath();g.roundRect?g.roundRect(tx-tw/2,ty-12,tw,24,6):g.rect(tx-tw/2,ty-12,tw,24);g.fill();g.stroke();g.fillStyle='#fff';g.fillText(txt,tx,ty+1)}}
+  // centre: lap, status, reference lap
+  let tot=0;for(const dn in S.laps)for(const l of S.laps[dn])tot=Math.max(tot,l.n);
+  g.fillStyle='#fff';g.font='900 '+Math.round(R*.28)+'px "Titillium Web",sans-serif';g.fillText(isRace()?`${lead?lead.cur:'–'}/${tot||'–'}`:(NL[S.sess.session_name]||''),X,Y-R*.08);
+  const stt=st.red?['Rode vlag','#e10600']:st.sc==='VSC'?['VSC','#ffd400']:st.sc?['Safety Car','#ffa31a']:Object.keys(st.sec).length?['Geel','#ffd400']:['Track clear','#2fd16b'];
+  g.font='700 13px "Titillium Web",sans-serif';const sw=g.measureText(stt[0]).width+16;g.fillStyle=stt[1]+'33';g.fillRect(X-sw/2,Y+R*.1,sw,22);g.fillStyle=stt[1];g.fillText(stt[0],X,Y+R*.1+11);
+  g.fillStyle='#8a8f9c';g.font='600 12px "Titillium Web",sans-serif';g.fillText('◷ '+fmtLap(ref),X,Y+R*.1+38);
+  // cars + labels (labels pushed outward so they don't overlap)
+  CHIT=[];const placed=[];
+  for(const c of [...cars].reverse()){const isSel=c===sel,[x,y]=pt(c.a,R);
+    g.beginPath();g.arc(x,y,isSel?10:7,0,7);g.fillStyle=col(c.r.d);g.fill();g.lineWidth=isSel?3:1.5;g.strokeStyle=isSel?'#fff':'#000';g.stroke();
+    if(c.r.best!=null&&rows.every(o=>o.best==null||o.best>=c.r.best)){g.save();g.shadowColor='#b45cff';g.shadowBlur=14;g.strokeStyle='#c78bff';g.lineWidth=2;g.beginPath();g.arc(x,y,13,0,7);g.stroke();g.restore()}
+    const t1=c.r.d.name_acronym||c.r.dn,t2=c===cars[0]?'':(c.lapped&&typeof (c.r.iv&&c.r.iv.gap)==='string'?c.r.iv.gap:'+'+c.g.toFixed(1));
+    g.font='700 12px "Titillium Web",sans-serif';const w=Math.max(g.measureText(t1).width,t2?g.measureText(t2).width*.85:0)+12,h=t2?30:18;
+    const ok=b=>b[0]>=2&&b[1]>=2&&b[0]+b[2]<=W-2&&b[1]+b[3]<=H-2&&!placed.some(q=>b[0]<q[0]+q[2]+2&&q[0]<b[0]+b[2]+2&&b[1]<q[1]+q[3]+2&&q[1]<b[1]+b[3]+2);
+    let b=null;search:for(const rad of [34,52,70,88,-38,-58,-78,106,124])for(const da of [0,.06,-.06,.12,-.12,.18,-.18,.26,-.26]){const [lx,ly]=pt(c.a+da,R+(isSel&&rad>0?rad+26:rad));const t=[lx-w/2,ly-h/2,w,h];if(ok(t)){b=t;break search}}
+    if(!b){const [lx,ly]=pt(c.a,R+34);b=[Math.max(2,Math.min(W-w-2,lx-w/2)),Math.max(2,Math.min(H-h-2,ly-h/2)),w,h]}
+    placed.push(b);g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=1;g.beginPath();g.moveTo(...pt(c.a,R+9));g.lineTo(b[0]+w/2,b[1]+h/2);g.stroke();
+    g.fillStyle=col(c.r.d);g.beginPath();g.roundRect?g.roundRect(b[0],b[1],w,h,5):g.rect(b[0],b[1],w,h);g.fill();
+    g.fillStyle='#fff';g.shadowColor='#000';g.shadowBlur=3;g.fillText(t1,b[0]+w/2,b[1]+(t2?9:9.5));if(t2){g.font='600 10px "Titillium Web",sans-serif';g.fillText(t2,b[0]+w/2,b[1]+22)}g.shadowBlur=0;
+    CHIT.push({dn:c.r.dn,b:[Math.min(b[0],x-10),Math.min(b[1],y-10),Math.max(b[0]+w,x+10)-Math.min(b[0],x-10),Math.max(b[1]+h,y+10)-Math.min(b[1],y-10)]});}
+}
+CC.addEventListener('click',e=>{const r=CC.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const h=CHIT.find(c=>x>=c.b[0]&&x<=c.b[0]+c.b[2]&&y>=c.b[1]&&y<=c.b[1]+c.b[3]);if(h){S.sel=S.sel==h.dn?null:String(h.dn);renderAll()}});
+
 /* ---------- rendering ---------- */
 const cv=$('map'),ctx=cv.getContext('2d');let view=null;
 function rotPt(x,y){switch(S.rot){case 1:return [-y,x];case 2:return [-x,-y];case 3:return [y,-x];default:return [x,y]}}
@@ -1432,6 +1487,7 @@ function loop(ts){
   needChunks();
   acc+=dt;if(acc>300){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
+  if(curView==='circle')drawCircle();
   if(curView==='map'){if((loop.f=(loop.f||0)+1)%2===0)drawDrops(dt*2);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
   requestAnimationFrame(loop);
 }
