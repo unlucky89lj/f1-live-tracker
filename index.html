@@ -158,6 +158,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
 #tyreTab table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}#tyreTab td,#tyreTab th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}#tyreTab th{color:var(--mute);font-weight:600}
 #onb{position:absolute;right:12px;top:64px;z-index:6;width:min(420px,46%);background:#000;border:1px solid #333846;border-radius:12px;overflow:hidden;display:none;box-shadow:0 8px 24px #000a}
 #onb.on{display:block}#onb .ot{display:flex;gap:4px;align-items:center;padding:5px;background:#111319}#onb .ot button{background:#1c1f27;border:1px solid #333846;color:#aab;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
+#onb.act{border-color:#ffd400;box-shadow:0 0 0 2px #ffd40066,0 8px 24px #000a}#onb #onbX{margin-left:6px;padding:1px 8px}
 #onb .ot button.on{background:#e10600;border-color:#e10600;color:#fff}#onb .ot span{margin-left:auto;font-size:12px;font-weight:700;padding-right:4px}
 #onbc{display:block;width:100%;aspect-ratio:16/9}#onb small{position:absolute;left:8px;bottom:5px;font-size:10px;color:rgba(255,255,255,.55)}
 #tel{position:absolute;right:12px;bottom:12px;z-index:6;width:300px;background:rgba(14,16,20,.94);border:1px solid #333846;border-radius:12px;padding:8px 10px;display:none;box-shadow:0 8px 24px #000a}
@@ -260,7 +261,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr)
       <div id="mapwrap"><canvas id="map"></canvas></div>
       <div class="wx" id="wx"></div>
       <div class="toast" id="toast"></div>
-      <div id="onb"><div class="ot"><button data-m="helm" class="on">Helmcamera</button><button data-m="boven">Van boven</button><span id="onbN"></span></div><canvas id="onbc"></canvas><small>nagebouwd uit positiedata · geen echte beelden</small></div>
+      <div id="onb"><div class="ot"><button data-m="helm" class="on">Helmcamera</button><button data-m="boven">Van boven</button><span id="onbN"></span><button id="onbX" title="sluiten">×</button></div><canvas id="onbc"></canvas><small>nagebouwd uit positiedata · geen echte beelden</small></div>
       <div id="tel"><div class="th2"><b id="telN">–</b><span id="telG" class="dim"></span><button id="telX" aria-label="Sluiten">×</button></div><div class="tg"><div class="spd"><b id="telS">–</b><small>km/u</small></div><div class="gear"><b id="telGear">–</b><small>versn.</small></div><div class="bars"><div><span>Gas</span><i><u id="telT"></u></i></div><div><span>Rem</span><i><u id="telB" class="br"></u></i></div><div><span>Toeren</span><i><u id="telR" class="rp"></u></i></div></div><div id="telD" class="drs">DRS</div></div><canvas id="telc"></canvas></div>
 
       <div class="maptools"><span class="wxm" id="wxm"><span>Weer</span><button data-m="uit">Uit</button><button data-m="rustig">Rustig</button><button data-m="alles">Alles</button></span><button class="btn" id="radarBtn" title="Regenradar aan/uit">Regenradar</button><button class="btn" id="battleb" title="Camera volgt het spannendste gevecht">Gevecht</button><button class="btn" id="secb" title="Mini-sectoren van de gekozen coureur op de baan">Sectoren</button><button class="btn" id="rsatb" title="Echte satellietfoto onder de baan">Echt</button><button class="btn" id="rot" title="Baan draaien">⟳ Draaien</button><button class="btn" id="labels">Namen</button></div>
@@ -1248,7 +1249,7 @@ function drawF1Car(g,c,k,sel){
 /* ---------- telemetry of the selected driver (OpenF1 car_data) ---------- */
 const TEL={dn:null,ch:new Map(),pend:new Set(),at:new Map()};
 function telNeed(){
-  const dn=S.sel;if(!dn||!S.sess){$('tel').classList.remove('on');return}
+  const dn=S.sel||(window.ONBPAIR&&curView==='map'?ONBPAIR[1]:null);if(!dn||!S.sess){$('tel').classList.remove('on');return}
   if(TEL.dn!==dn){TEL.dn=dn;TEL.ch.clear();TEL.pend.clear()}
   const k=Math.floor((S.t-S.t0)/CH),g=S.gen;
   for(const i of [k,k+1]){const a=S.t0+i*CH,stale=S.mode==='live'&&Date.now()-(TEL.at.get(i)||0)>3000&&a+CH>Date.now()-5000;
@@ -1296,8 +1297,16 @@ function battleTarget(W,H){
 }
 
 /* ---------- onboard / overhead view of the battle (rebuilt from positions, not video) ---------- */
-let ONBM='helm';
-document.querySelector('#onb .ot').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;ONBM=b.dataset.m;for(const x of document.querySelectorAll('#onb .ot button'))x.classList.toggle('on',x===b)};
+let ONBM='helm',ACT=null,ACTPREV=null;
+function detectAction(rows){ // a real overtake between two close cars (not a pit stop) → show it onboard for a few seconds
+  if(!isRace())return;const now={},P=ACTPREV;for(const r of rows)if(r.p)now[r.dn]=r.p;ACTPREV={t:S.t,p:now};
+  if(!P||Math.abs(S.t-P.t)>3000||!S.playing)return;if(ACT&&S.t<ACT.until)return;
+  const pitNear=dn=>{const r=rows.find(x=>x.dn==dn),ls=S.laps[dn]||[];return ls.some(l=>l.pit&&Math.abs(l.n-(r?r.cur:0))<=1)};
+  for(const r of rows){if(!r.p||P.p[r.dn]!==r.p+1)continue;const b=rows.find(x=>x.p===r.p+1&&P.p[x.dn]===r.p);if(!b)continue;
+    const g=b.iv&&b.iv.int;if(typeof g==='number'&&g>2)continue;if(pitNear(r.dn)||pitNear(b.dn)||r.cur<1)continue;
+    ACT={a:r.dn,b:b.dn,at:S.t,until:S.t+9000};$('onb').classList.add('act');break}
+}
+document.querySelector('#onb .ot').onclick=e=>{if(e.target.id==='onbX'){if(ACT)ACT.until=0;if(BATTLE)$('battleb').click();return}const b=e.target.closest('[data-m]');if(!b)return;ONBM=b.dataset.m;for(const x of document.querySelectorAll('#onb .ot button'))x.classList.toggle('on',x===b)};
 function nearestIdx(x,y){let bi=0,bd=1e18;const tr=S.track;for(let k=0;k<tr.length;k++){const d=(tr[k][0]-x)**2+(tr[k][1]-y)**2;if(d<bd){bd=d;bi=k}}return bi}
 function drawRearCar(g,x,y,sz,c,rain,blink){ // F1 car seen from behind, roughly to scale (1 unit ≈ 4 cm)
   g.save();g.translate(x,y);g.scale(sz,sz);
@@ -1319,9 +1328,11 @@ function drawRearCar(g,x,y,sz,c,rain,blink){ // F1 car seen from behind, roughly
 }
 function hash1(n){const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)}
 function drawOnboard(){
-  const el=$('onb'),pair=CAM.pair;if(!BATTLE||!pair||curView!=='map'){el.classList.remove('on');return}el.classList.add('on');
+  const el=$('onb'),act=ACT&&S.t<ACT.until&&S.t>=ACT.at-1000?ACT:null;if(!act&&ACT){ACT=null;el.classList.remove('act')}
+  const gOf=dn=>{const r=(lastRows||[]).find(x=>String(x.dn)===String(dn));return r&&r.iv&&typeof r.iv.int==='number'?r.iv.int:0};
+  const pair=act?[act.a,act.b,gOf(act.b)]:BATTLE?CAM.pair:null;window.ONBPAIR=pair;if(!pair||curView!=='map'){el.classList.remove('on');return}el.classList.add('on');
   const [dA,dB,gap]=pair,lead=S.drivers[dA]||{},chase=S.drivers[dB]||{};
-  $('onbN').innerHTML=`<span style="color:${col(chase)}">${chase.name_acronym||dB}</span> achter <span style="color:${col(lead)}">${lead.name_acronym||dA}</span> · ${gap.toFixed(1)} s`;
+  $('onbN').innerHTML=(act?'<b style="color:#ffd400">INHAALACTIE</b> · ':'')+`<span style="color:${col(chase)}">${chase.name_acronym||dB}</span> achter <span style="color:${col(lead)}">${lead.name_acronym||dA}</span> · ${gap.toFixed(1)} s`;
   const c=$('onbc'),dpr=DPRX(),W=c.clientWidth,H=c.clientHeight;if(!W||!H)return;if(c.width!==Math.round(W*dpr)){c.width=Math.round(W*dpr);c.height=Math.round(H*dpr)}
   const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);const wa=where(dA,S.t),wb=where(dB,S.t);if(!wa||!wb||!S.track.length)return;
   const night=isNight();
@@ -1337,12 +1348,14 @@ function drawOnboard(){
   if(Math.abs(Math.atan2(ty*dir,tx*dir)-Math.atan2(ah[1]-wb.y,ah[0]-wb.x))>Math.PI)hd=Math.atan2(ty*dir,tx*dir);
   if(CAM.hd==null||CAM.hdn!==dB){CAM.hd=hd;CAM.hdn=dB}let dh=hd-CAM.hd;dh=Math.atan2(Math.sin(dh),Math.cos(dh));CAM.hd+=dh*Math.min(1,frameDt/180);
   const fx=Math.cos(CAM.hd),fy=Math.sin(CAM.hd),tel=String(TEL.dn)===String(dB)?telSamples(S.t-2000,S.t).pop():null,spd=tel?tel.s:Math.hypot(mx,my)/40*3.6*10;
-  const shake=Math.min(1.4,spd/220)*(Math.sin(S.t*.09)+Math.sin(S.t*.157)*.6),ex=wb.x-fx*14,ey=wb.y-fy*14,F=W*.82,hor=H*.43+shake,eye=10;
+  const shake=Math.min(1.4,spd/220)*(Math.sin(S.t*.09)+Math.sin(S.t*.157)*.6),ex=wb.x-fx*14,ey=wb.y-fy*14,F=W*.6,hor=H*.42+shake,eye=8;
   const cam=(x,y,z)=>{const dx=x-ex,dy=y-ey;return [dx*fy-dy*fx,dx*fx+dy*fy,z]};
   const scr=q=>[W/2+q[0]/q[1]*F,hor+(eye-q[2])/q[1]*F];
   const poly=(pts,fill)=>{let out=[];for(let k=0;k<pts.length;k++){const A=pts[k],B=pts[(k+1)%pts.length],ia=A[1]>=4,ib=B[1]>=4;if(ia)out.push(A);if(ia!==ib){const t=(4-A[1])/(B[1]-A[1]);out.push([A[0]+(B[0]-A[0])*t,4,A[2]+(B[2]-A[2])*t])}}
     if(out.length<3)return;g.fillStyle=fill;g.beginPath();for(let k=0;k<out.length;k++){const p=scr(out[k]);k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])}g.closePath();g.fill()};
   const w=wxAt(),rain=!!(w&&w.rainfall>0),dusk=!night&&(()=>{const c=circ();return c&&sunElev(c[0],c[1],S.t)<8})();
+  const roll=Math.max(-.1,Math.min(.1,-.03-dh*5))+Math.min(.015,Math.abs(dh)*.3)*Math.sin(S.t*.21);g.save();g.translate(W/2,H/2);g.rotate(roll);g.scale(1.2,1.2);g.translate(-W/2,-H/2);
+  if(!window.ONBP){const pc=document.createElement('canvas');pc.width=48;pc.height=24;const px=pc.getContext('2d');px.fillStyle='#1b1b22';px.fillRect(0,0,48,24);const cs=['#e8e0d0','#c0392b','#2c6fd1','#f1c40f','#ecf0f1','#7f8c8d','#e67e22','#16a085'];for(let k=0;k<170;k++){px.fillStyle=cs[(hash1(k)*cs.length)|0];px.fillRect((hash1(k+.3)*48)|0,(hash1(k+.7)*24)|0,1+(hash1(k+.9)>.6),1)}window.ONBP=g.createPattern(pc,'repeat')}
   // sky
   const skyTop=night?'#03050d':rain?'#5d6670':dusk?'#3c5a8c':'#3f78c8',skyHor=night?'#2a2436':rain?'#a3abb3':dusk?'#f0b27a':'#cfe2f3';
   const sky=g.createLinearGradient(0,0,0,hor);sky.addColorStop(0,skyTop);sky.addColorStop(1,skyHor);g.fillStyle=sky;g.fillRect(0,0,W,hor+2);
@@ -1372,6 +1385,9 @@ function drawOnboard(){
       poly(Q(sd,half+12,half+(street?40:130)),mix(street?[70,72,78]:[60+ns,130+ns,85],fog)); // run-off (painted tarmac / grass)
       if(!street&&(Math.floor(idx/14)%3===0))poly(Q(sd,half+40,half+120),mix([196,178,140],fog)); // gravel trap
       const wo=half+(street?40:130),wh=street?11:9;
+      if(Math.floor(idx/18)%3!==2&&sd===(Math.floor(idx/54)%2?1:-1)){const so=wo+30;poly(V(sd,so,130).map((q,j)=>j<2?q:[q[0]+0,q[1]+sd*0,q[2]]),ONBP);g.globalAlpha=fog*.9;poly(V(sd,so-.5,130),mix([0,0,0],1));g.globalAlpha=1;
+        poly(Q(sd,so-20,so+40,140,150),mix(night?[28,28,34]:[200,200,205],fog));
+        if(night&&idx%3===0){const lp=cam(A[0]+sd*na[0]*(so-10),A[1]+sd*na[1]*(so-10),138);if(lp[1]>4){const s1=scr(lp),r=Math.max(2,F/lp[1]*14);g.globalCompositeOperation='lighter';const hg=g.createRadialGradient(s1[0],s1[1],0,s1[0],s1[1],r*4);hg.addColorStop(0,'rgba(255,225,170,.9)');hg.addColorStop(.2,'rgba(255,190,110,.35)');hg.addColorStop(1,'rgba(255,170,90,0)');g.fillStyle=hg;g.fillRect(s1[0]-r*4,s1[1]-r*4,r*8,r*8);g.globalCompositeOperation='source-over'}}}
       poly(V(sd,wo,wh),mix(idx%9<3&&!street?ADS[Math.floor(idx/9)%ADS.length]:street?[150,150,150]:[40,40,40],fog));            // wall / barrier
       if(street&&idx%9<4)poly(V(sd,wo-.5,wh*.75),mix(ADS[Math.floor(idx/9)%ADS.length],fog));
       if(idx%2===0){const p1=cam(A[0]+sd*na[0]*wo,A[1]+sd*na[1]*wo,wh),p2=cam(A[0]+sd*na[0]*wo,A[1]+sd*na[1]*wo,street?45:38);if(p1[1]>4){const s1=scr(p1),s2=scr(p2);g.strokeStyle=mix([70,70,70],fog);g.lineWidth=Math.max(.5,F/p1[1]*.8);g.beginPath();g.moveTo(s1[0],s1[1]);g.lineTo(s2[0],s2[1]);g.stroke()}}
@@ -1389,24 +1405,49 @@ function drawOnboard(){
   for(const dn in S.drivers){if(String(dn)===String(dB))continue;const p=String(dn)===String(dA)?wa:where(dn,S.t);if(!p)continue;const q=cam(p.x,p.y,0);if(q[1]<12||q[1]>5000||Math.abs(q[0])>q[1]*1.2)continue;cars.push([q,dn])}
   cars.sort((a,b)=>b[0][1]-a[0][1]);
   for(const [q,dn] of cars){const p=scr(q),sz=F/q[1]*.4,fog=Math.min(.85,(q[1]/5200)**1.3);g.globalAlpha=1-fog*.7;drawRearCar(g,p[0],p[1],sz,col(S.drivers[dn]||{}),rain,blink);g.globalAlpha=1}
-  // speed streaks and lens effects
-  const sp=Math.min(1,spd/320);if(sp>.3){g.strokeStyle=`rgba(255,255,255,${(sp-.3)*.12})`;g.lineWidth=1;for(let k=0;k<14;k++){const a=hash1(k+Math.floor(S.t/60))*Math.PI-Math.PI/2+Math.PI/2,side=k%2?1:-1,x0=W/2+side*W*(.35+hash1(k)*.2),y0=hor+H*(.15+hash1(k+5)*.35);g.beginPath();g.moveTo(x0,y0);g.lineTo(x0+side*W*.12*sp,y0+H*.08*sp);g.stroke()}}
-  // cockpit: front tyres, chassis, halo and mirrors as a helmet camera sees them
-  const steer=Math.max(-1,Math.min(1,dh*25));
-  for(const sd of [-1,1]){const x0=W/2+sd*W*.43+steer*W*.01,tg=g.createLinearGradient(x0-W*.07,0,x0+W*.07,0);tg.addColorStop(0,'#000');tg.addColorStop(.5,'#262626');tg.addColorStop(1,'#000');g.fillStyle=tg;g.beginPath();g.ellipse(x0,H*1.02,W*.075,H*.2,steer*.1,Math.PI,0);g.fill();
-    g.strokeStyle='rgba(255,255,255,.07)';g.lineWidth=1.5;for(let k=0;k<5;k++){const yy=H*.86+((S.t*spd/900+k*12)%60)*H/300;g.beginPath();g.moveTo(x0-W*.06,yy);g.lineTo(x0+W*.06,yy);g.stroke()}}
-  const cg=g.createLinearGradient(0,H*.72,0,H);cg.addColorStop(0,col(chase));cg.addColorStop(1,'#000');g.fillStyle=cg;g.beginPath();g.moveTo(W*.28,H);g.bezierCurveTo(W*.36,H*.78,W*.44,H*.74,W*.5,H*.74);g.bezierCurveTo(W*.56,H*.74,W*.64,H*.78,W*.72,H);g.closePath();g.fill(); // nose / chassis
-  g.fillStyle='rgba(255,255,255,.12)';g.beginPath();g.ellipse(W*.5,H*.79,W*.06,H*.015,0,0,7);g.fill();
-  const hg=g.createLinearGradient(W*.47,0,W*.53,0);hg.addColorStop(0,'#050505');hg.addColorStop(.45,'#3a3a3e');hg.addColorStop(1,'#050505');g.fillStyle=hg;g.beginPath();g.moveTo(W*.488,H);g.lineTo(W*.494,H*.31);g.lineTo(W*.506,H*.31);g.lineTo(W*.512,H);g.closePath();g.fill(); // halo pillar
-  g.strokeStyle='#121214';g.lineWidth=W*.028;g.lineCap='round';g.beginPath();g.moveTo(W*.16,H*1.05);g.bezierCurveTo(W*.22,H*.05,W*.78,H*.05,W*.84,H*1.05);g.stroke();
-  g.strokeStyle='rgba(255,255,255,.1)';g.lineWidth=1.5;g.beginPath();g.moveTo(W*.17,H*1.02);g.bezierCurveTo(W*.23,H*.07,W*.77,H*.07,W*.83,H*1.02);g.stroke();g.lineCap='butt';
-  for(const sd of [-1,1]){const mxp=W/2+sd*W*.38,my0=H*.62,mw=W*.13,mh=H*.1;g.fillStyle='#0c0c0e';g.beginPath();g.roundRect(mxp-mw/2-3,my0-3,mw+6,mh+6,6);g.fill();
-    const mg=g.createLinearGradient(0,my0,0,my0+mh);mg.addColorStop(0,skyHor);mg.addColorStop(.45,skyHor);mg.addColorStop(.5,night?'#25262c':'#6b6e74');mg.addColorStop(1,night?'#18191d':'#4d5056');g.fillStyle=mg;g.beginPath();g.roundRect(mxp-mw/2,my0,mw,mh,4);g.fill();
-    g.fillStyle='#0c0c0e';g.fillRect(mxp-sd*mw*.55,my0+mh*.6,sd*W*.05,4)}
-  const vg=g.createLinearGradient(0,0,0,H*.16);vg.addColorStop(0,'rgba(0,0,0,.92)');vg.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=vg;g.fillRect(0,0,W,H*.16); // visor edge
-  const vr=g.createRadialGradient(W/2,H*.5,H*.35,W/2,H*.5,W*.62);vr.addColorStop(0,'rgba(0,0,0,0)');vr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=vr;g.fillRect(0,0,W,H);
+  // speed streaks
+  const sp=Math.min(1,spd/320);if(sp>.3){g.strokeStyle=`rgba(255,255,255,${(sp-.3)*.12})`;g.lineWidth=1;for(let k=0;k<14;k++){const side=k%2?1:-1,x0=W/2+side*W*(.35+hash1(k+Math.floor(S.t/60))*.2),y0=hor+H*(.15+hash1(k+5)*.35);g.beginPath();g.moveTo(x0,y0);g.lineTo(x0+side*W*.12*sp,y0+H*.08*sp);g.stroke()}}
+  g.restore(); // end of rolled world
+  // ---- cockpit as a helmet camera sees it (head slightly left of centre, halo pillar to the right) ----
+  const tc=col(chase),steer=Math.max(-1,Math.min(1,dh*25)),gloss=(x0,y0,x1,y1)=>{const gr=g.createLinearGradient(x0,y0,x1,y1);gr.addColorStop(0,'#000');gr.addColorStop(.35,tc);gr.addColorStop(.55,tc);gr.addColorStop(.62,'rgba(255,255,255,.55)');gr.addColorStop(.7,tc);gr.addColorStop(1,'#000');return gr};
+  g.save();g.translate(W/2,H/2);g.rotate(roll*.5);g.translate(-W/2,-H/2);
+  // nose / front bodywork ahead of the cockpit
+  g.fillStyle=gloss(W*.3,H*.75,W*.9,H*.6);g.beginPath();g.moveTo(W*.18,H);g.bezierCurveTo(W*.35,H*.74,W*.52,H*.64,W*.66,H*.62);g.bezierCurveTo(W*.78,H*.64,W*.9,H*.74,W*.98,H);g.closePath();g.fill();
+  g.fillStyle='rgba(255,255,255,.18)';g.beginPath();g.ellipse(W*.6,H*.68,W*.08,H*.012,-.1,0,7);g.fill();
+  // left cockpit side + mirror on its stalk
+  g.fillStyle=gloss(0,H*.6,W*.45,H*.95);g.beginPath();g.moveTo(-5,H*.62);g.bezierCurveTo(W*.12,H*.6,W*.3,H*.66,W*.42,H*.78);g.lineTo(W*.36,H);g.lineTo(-5,H);g.closePath();g.fill();
+  g.fillStyle='rgba(0,0,0,.55)';g.beginPath();g.moveTo(W*.02,H*.8);g.bezierCurveTo(W*.15,H*.74,W*.28,H*.8,W*.34,H*.92);g.lineTo(W*.33,H);g.lineTo(W*.02,H);g.closePath();g.fill(); // cockpit opening
+  const mx0=W*.02,my0=H*.44,mw=W*.22,mh=H*.15;
+  g.strokeStyle=tc;g.lineWidth=W*.022;g.lineCap='round';g.beginPath();g.moveTo(mx0+mw*.75,my0+mh);g.quadraticCurveTo(mx0+mw*.95,my0+mh*1.6,mx0+mw*1.2,my0+mh*2.1);g.stroke();g.lineCap='butt';
+  g.fillStyle=gloss(mx0,my0-6,mx0,my0+mh+6);g.beginPath();g.roundRect(mx0-6,my0-6,mw+12,mh+12,10);g.fill();
+  const mg=g.createLinearGradient(0,my0,0,my0+mh);mg.addColorStop(0,skyHor);mg.addColorStop(.42,night?'#3a3040':'#9db3c6');mg.addColorStop(.5,night?'#2a2b31':'#6b6e74');mg.addColorStop(1,night?'#151619':'#45484e');g.fillStyle=mg;g.beginPath();g.roundRect(mx0,my0,mw,mh,7);g.fill();
+  g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=1.2;g.beginPath();g.moveTo(mx0+mw*.15,my0+mh*.75);g.quadraticCurveTo(mx0+mw*.5,my0+mh*.6,mx0+mw*.95,my0+mh*.8);g.stroke();
+  // right cockpit rim
+  g.fillStyle=gloss(W,H*.7,W*.85,H);g.beginPath();g.moveTo(W+5,H*.7);g.bezierCurveTo(W*.95,H*.72,W*.9,H*.8,W*.88,H);g.lineTo(W+5,H);g.closePath();g.fill();
+  // halo: big hoop overhead and the centre pillar
+  const hx=W*.6,hl=g.createLinearGradient(hx-W*.03,0,hx+W*.03,0);hl.addColorStop(0,'#050505');hl.addColorStop(.4,'#34343a');hl.addColorStop(1,'#050505');
+  g.fillStyle=hl;g.beginPath();g.moveTo(hx-W*.028,H*.66);g.lineTo(hx-W*.012,H*.2);g.lineTo(hx+W*.012,H*.2);g.lineTo(hx+W*.03,H*.66);g.closePath();g.fill();
+  g.fillStyle=tc;g.beginPath();g.moveTo(hx-W*.028,H*.66);g.lineTo(hx-W*.022,H*.5);g.lineTo(hx+W*.024,H*.5);g.lineTo(hx+W*.03,H*.66);g.closePath();g.fill();
+  g.strokeStyle='#0d0d10';g.lineWidth=W*.045;g.beginPath();g.moveTo(W*.3,H*1.1);g.bezierCurveTo(W*.3,H*-.12,W*1.05,H*-.18,W*1.04,H*.75);g.stroke();
+  g.strokeStyle='rgba(255,255,255,.12)';g.lineWidth=2;g.beginPath();g.moveTo(W*.315,H*1.05);g.bezierCurveTo(W*.32,H*-.08,W*1.02,H*-.14,W*1.02,H*.75);g.stroke();
+  // steering wheel with a live display (gear, speed, position)
+  g.save();g.translate(W*.82,H*1.02);g.rotate(steer*.25-.08);
+  const wg=g.createLinearGradient(0,-H*.32,0,0);wg.addColorStop(0,'#2a2a2e');wg.addColorStop(1,'#060607');g.fillStyle=wg;g.beginPath();g.moveTo(-W*.24,0);g.bezierCurveTo(-W*.22,-H*.28,-W*.08,-H*.32,0,-H*.32);g.bezierCurveTo(W*.1,-H*.32,W*.2,-H*.26,W*.24,0);g.closePath();g.fill();
+  g.strokeStyle='#3a3a40';g.lineWidth=2;g.stroke();
+  g.fillStyle='#000';g.beginPath();g.roundRect(-W*.07,-H*.24,W*.14,H*.12,4);g.fill();
+  const gear=tel&&tel.g!=null?tel.g:'–',pos=(lastRows||[]).findIndex(r=>String(r.dn)===String(dB))+1;
+  g.fillStyle='#29d3c5';g.beginPath();g.roundRect(-W*.065,-H*.232,W*.05,H*.105,3);g.fill();g.fillStyle='#000';g.textAlign='center';g.font=`900 ${Math.round(H*.085)}px "Titillium Web",sans-serif`;g.fillText(gear,-W*.04,-H*.15);
+  g.fillStyle='#fff';g.font=`800 ${Math.round(H*.05)}px "Titillium Web",sans-serif`;g.fillText(tel?tel.s:'',W*.02,-H*.19);g.fillStyle=gap<.5?'#ff5a4f':'#9ef0a0';g.font=`700 ${Math.round(H*.04)}px "Titillium Web",sans-serif`;g.fillText((pos?'P'+pos+' ':'')+(gap>0?'-'+gap.toFixed(1):''),W*.02,-H*.14);g.textAlign='left';
+  const rpm=tel&&tel.r?Math.min(1,tel.r/12500):0;for(let k=0;k<10;k++){g.fillStyle=k/10<rpm?(k<4?'#2ecc40':k<7?'#ff3b30':'#3b82f6'):'#1a1a1d';g.beginPath();g.arc(-W*.065+k*W*.0145,-H*.27,H*.012,0,7);g.fill()}
+  for(const [x,y,c2] of [[-.16,-.12,'#e8b800'],[-.13,-.2,'#d22'],[.13,-.2,'#2a7bd8'],[.16,-.12,'#e8b800'],[-.1,-.06,'#bbb'],[.1,-.06,'#bbb']]){g.fillStyle='#111';g.beginPath();g.arc(W*x,H*y,H*.026,0,7);g.fill();g.fillStyle=c2;g.beginPath();g.arc(W*x,H*y,H*.016,0,7);g.fill()}
+  g.restore();
+  g.restore();
+  // visor edge, glare and colour grade
+  g.save();g.shadowColor='#000';g.shadowBlur=18;g.fillStyle='#060505';g.beginPath();g.moveTo(-20,-20);g.lineTo(W+20,-20);g.lineTo(W+20,H*.12);g.bezierCurveTo(W*.7,H*.2,W*.3,H*.16,-20,H*.08);g.closePath();g.fill();g.restore();
+  if(night){g.globalCompositeOperation='lighter';const gl=g.createRadialGradient(W*.15,H*.16,0,W*.15,H*.16,W*.35);gl.addColorStop(0,'rgba(255,170,90,.22)');gl.addColorStop(1,'rgba(255,170,90,0)');g.fillStyle=gl;g.fillRect(0,0,W,H);g.globalCompositeOperation='source-over'}
+  const vr=g.createRadialGradient(W*.5,H*.5,H*.3,W*.5,H*.5,W*.62);vr.addColorStop(0,'rgba(0,0,0,0)');vr.addColorStop(1,'rgba(0,0,0,.6)');g.fillStyle=vr;g.fillRect(0,0,W,H);
+  g.fillStyle=night?'rgba(255,140,60,.05)':'rgba(255,200,140,.04)';g.fillRect(0,0,W,H);
   if(rain){g.fillStyle='rgba(220,230,245,.35)';for(let k=0;k<26;k++){const x=hash1(k*3.1)*W,y=hash1(k*7.7)*H*.7,r=1+hash1(k)*2.2;g.beginPath();g.arc(x,y,r,0,7);g.fill()}}
-  if(tel){g.fillStyle='rgba(0,0,0,.6)';g.beginPath();g.roundRect(W/2-36,H-30,72,22,5);g.fill();g.fillStyle='#fff';g.font='800 14px "Titillium Web",sans-serif';g.textAlign='center';g.fillText(tel.s+' km/u',W/2,H-15);g.textAlign='left'}
 }
 
 /* ---------- compare two laps: speed trace, delta, faster driver per piece of track ---------- */
@@ -1800,7 +1841,7 @@ let curView='map';
 function renderAll(force){
   if(!S.sess)return;
   renderAll.n=(renderAll.n||0)+1;const half=force?0:renderAll.n%2;
-  if(force||half===1){const {rows,overall}=renderTower();lastRows=rows;renderAll.ov=overall;renderHeader(rows)}
+  if(force||half===1){const {rows,overall}=renderTower();lastRows=rows;renderAll.ov=overall;renderHeader(rows);try{detectAction(rows)}catch(e){}}
   const rows=lastRows||[],overall=renderAll.ov;
   if(force||half===0){renderWx();renderRadio();placeRadio();try{syncWeather()}catch(e){}try{telNeed();renderTel()}catch(e){}}
   if(curView==='tyre')drawTyres();if(curView==='cmp')cmpLoad();
@@ -1820,7 +1861,7 @@ function loop(ts){
   acc+=dt;if(acc>170){acc=0;renderAll()}
   if(curView==='map'&&lastRows)drawMap(lastRows);
   if(curView==='circle')drawCircle();
-  if(curView==='map'&&BATTLE)drawOnboard();else $('onb').classList.remove('on');
+  if(curView==='map'&&(BATTLE||ACT))drawOnboard();else{$('onb').classList.remove('on');window.ONBPAIR=null}
   if(curView==='map'&&(loop.c=(loop.c||0)+1)%3===0)drawCircle($('circ2'),true);
   if(curView==='map'){if((loop.f=(loop.f||0)+1)%2===0)drawDrops(dt*2);if(rmap&&!$('radarpane').classList.contains('off')&&WXM!=='uit')drawMotion()}
   requestAnimationFrame(loop);
