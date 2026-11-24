@@ -375,7 +375,7 @@ async function buildTrack(){
   if(tr.length>50){S.track=tr;trackCum();geoAlign();fit();maybeAlign()}
 }
 async function loadSession(s){
-  reset();lastRain=null;RA.pause();raKey=null;raSig='';raLastT=0;S.mode='replay';S.sess=s;setLive(false);
+  reset();lastRain=null;WS.free=false;HIST.key='';HIST.grid=null;HIST.last=-1;RA.pause();raKey=null;raSig='';raLastT=0;S.mode='replay';S.sess=s;setLive(false);
   S.t0=T(s.date_start);S.t1=T(s.date_end);S.t=S.t0;
   const sk=s.session_key,g=S.gen,problems=[];
   const part=async(label,fn)=>{if(g!==S.gen)return;status(label+'…');try{await fn()}catch(e){problems.push(label.toLowerCase()+' ('+e.message+')')}if(g===S.gen)renderAll(true)};
@@ -861,7 +861,7 @@ function buildRadarFrames(){
   rFrames.forEach(f=>f.layer&&rmap.removeLayer(f.layer));
   rFrames=RAD.frames.filter(f=>f.t<=Date.now()+60000).map(f=>({...f,layer:null}));
   $('rseek').max=rFrames.length-1;rIdx=rFrames.length-1;
-  rFrames.forEach((f,i)=>frameLayer(i));showFrame(rIdx);setTimeout(calcMotion,2500);if(!rTimer&&!rStopped)startRadar();
+  rFrames.forEach((f,i)=>frameLayer(i));showFrame(rIdx);setTimeout(calcMotion,2500);WS.idx=-1;syncWeather(true);
 }
 function frameLayer(i){const f=rFrames[i];if(!f)return null;if(!f.layer){f.layer=new RadarLayer({url:`${RAD.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`,pane:'radar',maxNativeZoom:7,maxZoom:19,opacity:0,zIndex:400+i,updateWhenZooming:false,keepBuffer:1});f.layer.addTo(rmap)}return f.layer}
 function showFrame(i){
@@ -875,8 +875,8 @@ function showFrame(i){
 let rStopped=false,rHold=0;
 function startRadar(){clearInterval(rTimer);$('rplay').textContent='❚❚';rTimer=setInterval(()=>{if(rIdx===rFrames.length-1&&rHold++<2)return;rHold=0;showFrame(rIdx+1)},900)}
 function stopRadar(){clearInterval(rTimer);rTimer=null;$('rplay').textContent='▶'}
-$('rseek').oninput=()=>{rStopped=true;stopRadar();showFrame(+$('rseek').value)};
-$('rplay').onclick=()=>{if(rTimer){rStopped=true;stopRadar()}else{rStopped=false;startRadar()}};
+$('rseek').oninput=()=>{if(HIST.active){if(S.mode==='replay'&&S.t1>S.t0){S.t=S.t0+(S.t1-S.t0)*$('rseek').value/(+$('rseek').max||100);renderAll()}return}WS.free=true;stopRadar();showFrame(+$('rseek').value)};
+$('rplay').onclick=()=>{WS.free=false;syncWeather(true)};
 $('rzoom').onclick=()=>{if(!rmap)return;if(rmap.getZoom()>=12)rmap.setView(rCenter,10);else fitCircuit()};
 $('rsat').onclick=()=>setBase(!SATON);
 $('rbig').onclick=()=>{$('radarpane').classList.toggle('big');setTimeout(()=>{if(rmap){rmap.invalidateSize();if(rmap.getZoom()>=12)fitCircuit()}fit()},340)};
@@ -906,6 +906,7 @@ function frameAlpha(fi){
   return (x,y)=>{x=Math.floor(x);y=Math.floor(y);const tx=Math.floor(x/256),ty=Math.floor(y/256),a=T[tx+':'+ty+':7'];return a?a[(y-ty*256)*256+(x-tx*256)]:0};
 }
 function calcMotion(){
+  if(HIST.active){MOT=[];return}
   MOT=[];if(!rmap||!motOn||rFrames.length<3)return;
   const n=rFrames.length,A=frameAlpha(n-3),B=frameAlpha(n-2),C=frameAlpha(n-1);if(!A||!B||!C){if((calcMotion.tries=(calcMotion.tries||0)+1)<6)setTimeout(calcMotion,2000);return}calcMotion.tries=0;
   const b=rmap.getPixelBounds(),z=rmap.getZoom(),k=Math.pow(2,7-z);
@@ -956,10 +957,70 @@ function drawMotion(){
 function schedMotion(){clearTimeout(motTimer);motTimer=setTimeout(()=>(window.requestIdleCallback||setTimeout)(calcMotion),700)}
 
 
+/* ---- weather map in step with the race ----
+   recent/live: the real radar frame closest to the race clock
+   older races: a rain map rebuilt from Open-Meteo's 15-minute history on a grid around the circuit */
+const WS={idx:-1,free:false};
+const HIST={active:false,key:'',grid:null,times:null,lat:null,lon:null,ov:null,last:-1,status:''};
+function histFetch(){
+  const s=S.sess;if(!s||!rCenter)return;const key=s.session_key+':'+rCenter.join(',');if(HIST.key===key)return;HIST.key=key;HIST.grid=null;if(HIST.ov){rmap.removeLayer(HIST.ov);HIST.ov=null}HIST.status='laden';
+  const N=9,dla=.25,dlo=.25/Math.cos(rCenter[0]*Math.PI/180),la=[],lo=[];
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){la.push((rCenter[0]+dla-2*dla*i/(N-1)).toFixed(3));lo.push((rCenter[1]-dlo+2*dlo*j/(N-1)).toFixed(3))}
+  const d0=new Date(S.t0-3600000).toISOString().slice(0,10),d1=new Date(S.t1+3600000).toISOString().slice(0,10),old=Date.now()-S.t0>85*864e5;
+  const base=`latitude=${la.join(',')}&longitude=${lo.join(',')}&start_date=${d0}&end_date=${d1}&timezone=GMT`;
+  const urls=old?[`https://archive-api.open-meteo.com/v1/archive?${base}&hourly=precipitation`]:[`https://api.open-meteo.com/v1/forecast?${base}&minutely_15=precipitation`,`https://api.open-meteo.com/v1/forecast?${base}&hourly=precipitation`];
+  (async()=>{for(const u of urls){try{const r=await fetch(u);if(!r.ok)continue;let j=await r.json();if(!Array.isArray(j))j=[j];
+      const blk=j[0].minutely_15?'minutely_15':'hourly';if(!j[0][blk])continue;
+      HIST.times=j[0][blk].time.map(t=>Date.parse(t+'Z'));const mul=blk==='minutely_15'?4:1;
+      HIST.grid=j.map(o=>o[blk].precipitation.map(v=>(v||0)*mul)); // mm per hour
+      HIST.N=N;HIST.b=[rCenter[0]-dla,rCenter[1]-dlo,rCenter[0]+dla,rCenter[1]+dlo];HIST.res=blk==='minutely_15'?'15 min':'per uur';HIST.last=-1;HIST.status='ok';return}catch(e){}}
+    HIST.status='mislukt'})();
+}
+function histValue(lat,lon,t){
+  const H=HIST,N=H.N;if(!H.grid)return 0;const T=H.times;let k=0;while(k<T.length-2&&T[k+1]<=t)k++;const f=Math.max(0,Math.min(1,(t-T[k])/((T[k+1]-T[k])||1)));
+  const gi=(H.b[2]-lat)/(H.b[2]-H.b[0])*(N-1),gj=(lon-H.b[1])/(H.b[3]-H.b[1])*(N-1);if(gi<0||gj<0||gi>N-1||gj>N-1)return 0;
+  const i0=Math.floor(gi),j0=Math.floor(gj),i1=Math.min(N-1,i0+1),j1=Math.min(N-1,j0+1),fi=gi-i0,fj=gj-j0;
+  const v=(i,j)=>{const a=H.grid[i*N+j];return a[k]*(1-f)+(a[k+1]??a[k])*f};
+  return (v(i0,j0)*(1-fj)+v(i0,j1)*fj)*(1-fi)+(v(i1,j0)*(1-fj)+v(i1,j1)*fj)*fi;
+}
+function histAt(x,y){if(!rmap||!HIST.grid)return 0;const ll=rmap.containerPointToLatLng([x,y]);return Math.min(1,histValue(ll.lat,ll.lng,S.t)/6)}
+const RSTOPS=[[.1,[160,210,255,0]],[.3,[160,210,255,150]],[1,[90,160,240,190]],[3,[40,100,215,210]],[7,[20,60,170,225]],[12,[255,220,0,235]],[25,[255,120,0,240]],[50,[230,0,0,245]]];
+function rcol(v){if(v<RSTOPS[0][0])return null;for(let i=1;i<RSTOPS.length;i++)if(v<RSTOPS[i][0]){const [a,ca]=RSTOPS[i-1],[b,cb]=RSTOPS[i],f=(v-a)/(b-a);return ca.map((c,k)=>c+(cb[k]-c)*f)}return RSTOPS[RSTOPS.length-1][1]}
+function histDraw(){
+  const H=HIST;if(!H.grid||!rmap)return;const tq=Math.round(S.t/60000);if(tq===H.last)return;H.last=tq;
+  const R=96,c=document.createElement('canvas');c.width=c.height=R;const x=c.getContext('2d'),im=x.createImageData(R,R);let any=false;
+  for(let py=0;py<R;py++)for(let px=0;px<R;px++){const lat=H.b[2]-(py+.5)/R*(H.b[2]-H.b[0]),lon=H.b[1]+(px+.5)/R*(H.b[3]-H.b[1]),col=rcol(histValue(lat,lon,S.t));
+    if(col){const o=(py*R+px)*4;im.data[o]=col[0];im.data[o+1]=col[1];im.data[o+2]=col[2];const ed=Math.min(1,Math.min(px,py,R-1-px,R-1-py)/(R*.12));im.data[o+3]=col[3]*ed;any=true}}
+  x.putImageData(im,0,0);const url=c.toDataURL();
+  if(!H.ov)H.ov=L.imageOverlay(url,[[H.b[0],H.b[1]],[H.b[2],H.b[3]]],{pane:'radar',opacity:.85,interactive:false}).addTo(rmap);else H.ov.setUrl(url);
+}
+function syncWeather(force){
+  if(!rmap||!S.sess)return;
+  const recent=S.mode==='live'||(rFrames.length&&S.t>=rFrames[0].t-5*60000&&S.t<=Date.now()+60000);
+  $('rplay').style.display=WS.free?'':'none';
+  if(recent||WS.free){
+    if(HIST.active){HIST.active=false;if(HIST.ov)HIST.ov.setOpacity(0)}
+    if(WS.free||!rFrames.length)return;
+    let bi=0;for(let i=0;i<rFrames.length;i++)if(Math.abs(rFrames[i].t-S.t)<Math.abs(rFrames[bi].t-S.t))bi=i;
+    if(+$('rseek').max!==rFrames.length-1)$('rseek').max=rFrames.length-1;
+    if(bi!==rIdx||force){stopRadar();showFrame(bi)}
+    return;
+  }
+  // older race: rebuilt rain map
+  if(!HIST.active){HIST.active=true;stopRadar();rFrames.forEach(f=>f.layer&&f.layer.setOpacity(0));if(HIST.ov)HIST.ov.setOpacity(.85);MOT=[];$('rspd').textContent=''}
+  if($('rseek').max!=='1000')$('rseek').max=1000;
+  histFetch();histDraw();
+  const hm=fmtClock(S.t).slice(0,5);$('rt0').textContent=S.t0?fmtClock(S.t0).slice(0,5):'';$('rt1').textContent=S.t1?fmtClock(S.t1).slice(0,5):'';
+  $('rtime').innerHTML=hm+' <span style="font-weight:600;color:#8a93a3">race</span>';
+  $('rspd').textContent=HIST.status==='ok'?'regen van toen ('+HIST.res+')':HIST.status==='laden'?'regen van toen laden…':'regen van toen niet beschikbaar';
+  if(S.t1>S.t0)$('rseek').value=Math.round((S.t-S.t0)/(S.t1-S.t0)*(+$('rseek').max||100));
+}
+
 /* rain streaks only where the radar shows rain */
 const dcv=$('rdrops'),dctx=dcv.getContext('2d');const RD=Array.from({length:240},()=>({x:0,y:0,l:0,a:0,life:0}));
 function sizeDrops(){const r=dcv.getBoundingClientRect(),dpr=devicePixelRatio||1;dcv.width=r.width*dpr;dcv.height=r.height*dpr}
 function rainAt(x,y){
+  if(HIST.active)return histAt(x,y);
   const f=rFrames[rIdx];if(!f||!f.layer||!rmap)return 0;
   const p=rmap.project(rmap.containerPointToLatLng([x,y]),7),tx=Math.floor(p.x/256),ty=Math.floor(p.y/256),t=f.layer._tiles&&f.layer._tiles[tx+':'+ty+':7'];
   if(!t||!t.el||!t.el._a)return 0;
@@ -1355,7 +1416,7 @@ function renderGrid(rows,overall){
 let curView='map';
 function renderAll(force){
   if(!S.sess)return;
-  const {rows,overall}=renderTower();renderHeader(rows);renderWx();renderRadio();placeRadio();
+  const {rows,overall}=renderTower();renderHeader(rows);renderWx();renderRadio();placeRadio();try{syncWeather()}catch(e){}
   if(curView==='grid')renderGrid(rows,overall);
   lastRows=rows;
 }
